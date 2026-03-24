@@ -1,0 +1,51 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Qt runtime packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Ruff
+        run: ruff check src tests/smoke tests/conftest.py
+
+      - name: Deadcode
+        run: |
+          output="$(deadcode src/ --no-color | grep -Ev 'DC0[12]' | grep -Ev '/widgets/' || true)"
+          if [ -n "$output" ]; then
+            echo "$output"
+            exit 1
+          fi
+
+      - name: UI smoke tests
+        run: |
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:pytestqt -p no:pytestqt.plugin tests/smoke/test_ui_smoke.py
+
+      - name: Pytest with coverage
+        run: |
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p pytest_cov -p no:pytestqt -p no:pytestqt.plugin --cov=src/ai_content_classifier --cov-report=term-missing --cov-fail-under=50

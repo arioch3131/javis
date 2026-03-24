@@ -1,0 +1,139 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "javis"
+version = "1.0.0-beta.2"
+description = "Javis desktop application"
+readme = "README.md"
+license = { text = "GPL-3.0-only" }
+requires-python = ">=3.11"
+dependencies = [
+    "PyQt6==6.10.2",
+    "requests==2.32.5",
+    "chardet<8",
+    "SQLAlchemy==2.0.48",
+    "numpy==2.4.3",
+    "pillow==12.1.1",
+    "pdfminer.six==20260107",
+    "python-docx==1.2.0",
+    "striprtf==0.0.29",
+    "hachoir==3.3.0",
+    "pypdf==6.9.1",
+    "python-magic==0.4.27",
+    "psutil==7.2.2",
+    "omni_cache @ git+https://github.com/arioch3131/omni-cache.git@v1.1.0",
+    "smartpool @ git+https://github.com/arioch3131/smartpool.git@1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "deadcode",
+    "mypy",
+    "ruff",
+    "pytest==9.0.2",
+    "pytest-qt",
+    "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ai_content_classifier*"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.mypy]
+mypy_path = "src"
+explicit_package_bases = true
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+no_implicit_optional = true
+check_untyped_defs = true
+ignore_missing_imports = true
+exclude = [
+    "^tests/",
+    "^examples/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "ai_content_classifier.services.shared.*",
+    "ai_content_classifier.services.metadata.*",
+    "ai_content_classifier.services.llm.*",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+
+[[tool.mypy.overrides]]
+module = [
+    "ai_content_classifier.views.*",
+]
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "ai_content_classifier.controllers.*",
+    "ai_content_classifier.core.memory.*",
+    "ai_content_classifier.services.auto_organization_service",
+    "ai_content_classifier.services.database.content_database_service",
+    "ai_content_classifier.services.database.content_reader",
+    "ai_content_classifier.services.database.content_writer",
+    "ai_content_classifier.services.database.operations.*",
+    "ai_content_classifier.services.file.*",
+    "ai_content_classifier.services.llm.*",
+    "ai_content_classifier.services.metadata.extractors.hachoir_extractor",
+    "ai_content_classifier.services.metadata.extractors.pillow_extractor",
+    "ai_content_classifier.services.metadata.extractors.pypdf_extractor",
+    "ai_content_classifier.services.preprocessing.*",
+    "ai_content_classifier.services.theme.*",
+    "ai_content_classifier.services.thumbnail.*",
+    "ai_content_classifier.themes.*",
+    "ai_content_classifier.views.*",
+]
+ignore_errors = true
+
+[tool.deadcode]
+ignore_names = [
+    "HachoirExtractor",
+    "PillowImageExtractor",
+    "PyPDFExtractor",
+    "TextMetadataExtractor",
+    "Tag",
+    "Collection",
+    "invalidate_model",
+    "get_missing_dependencies",
+    "create_custom_palette",
+    "register_theme",
+    "create_thumbnails_batch",
+    "create_thumbnails_batch_async",
+    "create_thumbnail_for_virtualization",
+    "_matches_search",
+    "closeEvent",
+    "_document_repo",
+    "_video_repo",
+    "_audio_repo",
+    "estimated_remaining_time",
+    "import_error",
+    "last_checked",
+    "has_error",
+    "truncation_ratio",
+    "should_cancel_scan",
+    "last_scan_results",
+    "_scan_operation_snapshot",
+    "_scan_operation_started_at",
+]
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["src"]
+testpaths = ["tests/unit", "tests/integration", "tests/performance"]

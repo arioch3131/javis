@@ -1,0 +1,104 @@
+{
+  "menus": {
+    "file": "&Fichier",
+    "scan": "&Scan",
+    "view": "&Affichage",
+    "tools": "&Outils",
+    "filter": "&Filtre",
+    "help": "&Aide",
+    "panels": "📋 &Panneaux",
+    "zoom": "🔍 &Zoom",
+    "database": "🗄️ &Base de donnees"
+  },
+  "toolbar": {
+    "main": "Principal",
+    "scan": "Scan",
+    "view": "Affichage"
+  },
+  "quick_scan": {
+    "enter_folder_path": "Saisir le chemin du dossier...",
+    "tooltip": "Lancer un scan rapide de ce dossier",
+    "select_folder_dialog_title": "Selectionner un dossier pour le scan rapide"
+  },
+  "actions": {
+    "file_open": { "text": "📁 &Scanner un dossier..." },
+    "file_recent": { "text": "📂 &Dossiers recents" },
+    "file_export": { "text": "📤 &Exporter les resultats..." },
+    "file_import": { "text": "📥 &Importer les parametres..." },
+    "file_exit": { "text": "🚪 &Quitter" },
+    "scan_quick": { "text": "⚡ &Scan rapide" },
+    "scan_advanced": { "text": "🔍 &Scan avance..." },
+    "scan_scheduled": { "text": "⏰ &Scan planifie..." },
+    "scan_stop": { "text": "⏹️ &Arreter le scan" },
+    "scan_refresh": { "text": "🔄 &Rafraichir" },
+    "view_grid": { "text": "⊞ Vue &Grille" },
+    "view_list": { "text": "☰ Vue &Liste" },
+    "view_columns": { "text": "🗂️ Vue &Colonnes" },
+    "view_sidebar": { "text": "📋 &Barre laterale" },
+    "view_preview": { "text": "👁️ Panneau &Apercu" },
+    "view_filters": { "text": "🔍 Filtres &Actifs" },
+    "view_zoom_in": { "text": "🔍+ Zoom &Avant" },
+    "view_zoom_out": { "text": "🔍- Zoom A&rriere" },
+    "view_zoom_reset": { "text": "🔍 &Reinitialiser le zoom" },
+    "view_fullscreen": { "text": "🖥️ &Plein ecran" },
+    "view_themes": { "text": "🎨 &Themes..." },
+    "tools_categorize": { "text": "🏷️ &Categoriser les fichiers..." },
+    "tools_organize": { "text": "📁 &Organiser les fichiers..." },
+    "tools_clear_db": { "text": "🗑️ &Vider la base" },
+    "tools_compact_db": { "text": "🗜️ &Compacter la base" },
+    "tools_settings": { "text": "⚙️ &Parametres..." },
+    "tools_llm_test": { "text": "🔗 Tester la connexion &LLM" },
+    "filter_by_category": { "text": "🏷️ Par &categorie..." },
+    "filter_by_year": { "text": "📅 Par &annee..." },
+    "filter_by_extension": { "text": "📎 Par &extension..." },
+    "filter_reset": { "text": "🧹 Reinitialiser les &filtres" },
+    "help_documentation": { "text": "📖 &Documentation" },
+    "help_shortcuts": { "text": "⌨️ &Raccourcis clavier" },
+    "help_logs": { "text": "📝 Afficher les &logs" },
+    "help_debug": { "text": "🐛 Infos &debug" },
+    "help_about": { "text": "ℹ️ &A propos" }
+  },
+  "settings": {
+    "title": "Parametres de l'application",
+    "description": "Configurer les preferences de l'application.",
+    "comma_separated_values": "Valeurs separees par des virgules",
+    "test_llm_connection": "Tester la connexion LLM",
+    "llm_connection_title": "Connexion LLM",
+    "configuration_error_title": "Erreur de configuration",
+    "configuration_error_api_missing": "Champ URL API introuvable dans les parametres.",
+    "api": {
+      "missing_title": "URL API manquante",
+      "missing_message": "Veuillez renseigner une URL API avant de tester la connexion."
+    },
+    "connection": {
+      "not_tested": "Etat de la connexion: non testee",
+      "testing": "Etat de la connexion: test en cours...",
+      "success": "Etat de la connexion: succes",
+      "failed": "Etat de la connexion: echec"
+    },
+    "connection_success_message": "Connexion reussie.",
+    "connection_failed_message": "Connexion echouee.",
+    "buttons": {
+      "save": "Enregistrer",
+      "cancel": "Annuler"
+    },
+    "categories": {
+      "General": "General",
+      "API": "API",
+      "LLM": "LLM",
+      "Scanning": "Scan",
+      "Preprocessing": "Pretraitement",
+      "Thumbnails": "Miniatures",
+      "Categorization": "Categorisation"
+    },
+    "language": {
+      "tab": "Langue",
+      "label": "Langue:",
+      "english": "Anglais",
+      "french": "Francais",
+      "help": "Astuce: la langue est enregistree dans les parametres et reappliquee au demarrage.",
+      "changed_title": "Langue mise a jour",
+      "changed_message": "La preference de langue est enregistree. Les menus principaux ont ete rafraichis. Certaines fenetres peuvent necessiter d'etre rouvertes."
+    }
+  }
+}

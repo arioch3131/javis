@@ -1,0 +1,104 @@
+{
+  "menus": {
+    "file": "&File",
+    "scan": "&Scan",
+    "view": "&View",
+    "tools": "&Tools",
+    "filter": "&Filter",
+    "help": "&Help",
+    "panels": "📋 &Panels",
+    "zoom": "🔍 &Zoom",
+    "database": "🗄️ &Database"
+  },
+  "toolbar": {
+    "main": "Main",
+    "scan": "Scan",
+    "view": "View"
+  },
+  "quick_scan": {
+    "enter_folder_path": "Enter folder path...",
+    "tooltip": "Quick scan this folder",
+    "select_folder_dialog_title": "Select folder for quick scan"
+  },
+  "actions": {
+    "file_open": { "text": "📁 &Scan Folder..." },
+    "file_recent": { "text": "📂 &Recent Folders" },
+    "file_export": { "text": "📤 &Export Results..." },
+    "file_import": { "text": "📥 &Import Settings..." },
+    "file_exit": { "text": "🚪 E&xit" },
+    "scan_quick": { "text": "⚡ &Quick Scan" },
+    "scan_advanced": { "text": "🔍 &Advanced Scan..." },
+    "scan_scheduled": { "text": "⏰ &Scheduled Scan..." },
+    "scan_stop": { "text": "⏹️ &Stop Scan" },
+    "scan_refresh": { "text": "🔄 &Refresh" },
+    "view_grid": { "text": "⊞ &Grid View" },
+    "view_list": { "text": "☰ &List View" },
+    "view_columns": { "text": "🗂️ &Columns View" },
+    "view_sidebar": { "text": "📋 &Sidebar" },
+    "view_preview": { "text": "👁️ &Preview Panel" },
+    "view_filters": { "text": "🔍 &Active Filters" },
+    "view_zoom_in": { "text": "🔍+ Zoom &In" },
+    "view_zoom_out": { "text": "🔍- Zoom &Out" },
+    "view_zoom_reset": { "text": "🔍 &Reset Zoom" },
+    "view_fullscreen": { "text": "🖥️ &Full Screen" },
+    "view_themes": { "text": "🎨 &Themes..." },
+    "tools_categorize": { "text": "🏷️ &Categorize Files..." },
+    "tools_organize": { "text": "📁 &Organize Files..." },
+    "tools_clear_db": { "text": "🗑️ &Clear Database" },
+    "tools_compact_db": { "text": "🗜️ &Compact Database" },
+    "tools_settings": { "text": "⚙️ &Settings..." },
+    "tools_llm_test": { "text": "🔗 Test &LLM Connection" },
+    "filter_by_category": { "text": "🏷️ By Category..." },
+    "filter_by_year": { "text": "📅 By Year..." },
+    "filter_by_extension": { "text": "📎 By Extension..." },
+    "filter_reset": { "text": "🧹 Reset Filters" },
+    "help_documentation": { "text": "📖 &Documentation" },
+    "help_shortcuts": { "text": "⌨️ &Keyboard Shortcuts" },
+    "help_logs": { "text": "📝 Show &Logs" },
+    "help_debug": { "text": "🐛 &Debug Info" },
+    "help_about": { "text": "ℹ️ &About" }
+  },
+  "settings": {
+    "title": "Application Settings",
+    "description": "Configure all application preferences.",
+    "comma_separated_values": "Comma-separated values",
+    "test_llm_connection": "Test LLM Connection",
+    "llm_connection_title": "LLM Connection",
+    "configuration_error_title": "Configuration error",
+    "configuration_error_api_missing": "API URL field not found in settings dialog.",
+    "api": {
+      "missing_title": "Missing API URL",
+      "missing_message": "Please provide an API URL before testing the connection."
+    },
+    "connection": {
+      "not_tested": "Connection status: not tested",
+      "testing": "Connection status: testing...",
+      "success": "Connection status: success",
+      "failed": "Connection status: failed"
+    },
+    "connection_success_message": "Connection successful.",
+    "connection_failed_message": "Connection failed.",
+    "buttons": {
+      "save": "Save",
+      "cancel": "Cancel"
+    },
+    "categories": {
+      "General": "General",
+      "API": "API",
+      "LLM": "LLM",
+      "Scanning": "Scanning",
+      "Preprocessing": "Preprocessing",
+      "Thumbnails": "Thumbnails",
+      "Categorization": "Categorization"
+    },
+    "language": {
+      "tab": "Language",
+      "label": "Language:",
+      "english": "English",
+      "french": "French",
+      "help": "Tip: language is saved in settings and will be reused at startup.",
+      "changed_title": "Language updated",
+      "changed_message": "Language preference saved. Main menus were refreshed. Some dialogs may need to be reopened."
+    }
+  }
+}
