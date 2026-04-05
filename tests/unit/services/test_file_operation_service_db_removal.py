@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock
 
-from ai_content_classifier.services.file.file_operation_service import FileOperationService
+from ai_content_classifier.services.file.file_operation_service import (
+    FileOperationService,
+)
 
 
 def test_remove_files_from_database_updates_current_files_and_callbacks():
@@ -19,7 +21,9 @@ def test_remove_files_from_database_updates_current_files_and_callbacks():
     ]
     on_files_updated = MagicMock()
     on_stats_updated = MagicMock()
-    service.set_callbacks(on_files_updated=on_files_updated, on_stats_updated=on_stats_updated)
+    service.set_callbacks(
+        on_files_updated=on_files_updated, on_stats_updated=on_stats_updated
+    )
 
     deleted = service.remove_files_from_database(["/tmp/a.png", "/tmp/c.png"])
 

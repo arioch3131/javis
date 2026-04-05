@@ -7,10 +7,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from ai_content_classifier.models.content_models import ContentItem, Image
 
 from ai_content_classifier.repositories.content_repository import (
-    ContentRepository, ContentRepositoryFactory, UnitOfWork, ContentFilter
+    ContentRepository,
+    ContentRepositoryFactory,
+    UnitOfWork,
+    ContentFilter,
 )
 
 from ai_content_classifier.services.database.database_service import DatabaseService
+
 
 # Fixtures
 @pytest.fixture
@@ -30,21 +34,25 @@ def mock_db_service():
     db_service.get_session.return_value = mock_session_context_manager
     return db_service
 
+
 @pytest.fixture
 def mock_session(mock_db_service):
     """Fixture for a mock SQLAlchemy Session."""
     # This will now return the single mock session instance created in mock_db_service
     return mock_db_service.get_session.return_value.__enter__.return_value
 
+
 @pytest.fixture
 def content_repository(mock_db_service):
     """Fixture for ContentRepository with a mock DatabaseService and ContentItem model."""
     return ContentRepository(mock_db_service, ContentItem)
 
+
 @pytest.fixture
 def image_repository(mock_db_service):
     """Fixture for ContentRepository with a mock DatabaseService and Image model."""
     return ContentRepository(mock_db_service, Image)
+
 
 # Tests for UnitOfWork
 class TestUnitOfWork:
@@ -66,12 +74,14 @@ class TestUnitOfWork:
         mock_session.close.assert_called_once()
         mock_session.commit.assert_not_called()
 
+
 # Tests for ContentFilter
 class TestContentFilter:
     def test_content_filter_by_type(self):
         filters = ContentFilter().by_type("image").build()
         assert len(filters) == 1
         assert str(filters[0]) == str(ContentItem.content_type == "image")
+
 
 # Tests for ContentRepository
 class TestContentRepository:
@@ -82,8 +92,8 @@ class TestContentRepository:
     def test_session_context_manager(self, content_repository, mock_session):
         with content_repository.session() as session:
             assert session is mock_session
-        mock_session.commit.assert_not_called() # Session is managed by get_session context
-        mock_session.close.assert_not_called() # Session is managed by get_session context
+        mock_session.commit.assert_not_called()  # Session is managed by get_session context
+        mock_session.close.assert_not_called()  # Session is managed by get_session context
 
     def test_count(self, content_repository, mock_session):
         # Mock the entire chain of calls for count
@@ -107,11 +117,13 @@ class TestContentRepository:
 
     def test_save_new_item(self, content_repository, mock_session):
         new_item = MagicMock(spec=ContentItem, id=None)
+
         # Simulate id being set after add/commit
         def set_id_side_effect(*args, **kwargs):
             new_item.id = 1
+
         mock_session.add.side_effect = set_id_side_effect
-        mock_session.get.return_value = new_item # For refresh
+        mock_session.get.return_value = new_item  # For refresh
 
         saved_item = content_repository.save(new_item)
         mock_session.add.assert_called_once_with(new_item)
@@ -122,7 +134,7 @@ class TestContentRepository:
     def test_save_existing_item(self, content_repository, mock_session):
         existing_item = MagicMock(spec=ContentItem, id=1)
         mock_session.merge.return_value = existing_item
-        mock_session.get.return_value = existing_item # For refresh
+        mock_session.get.return_value = existing_item  # For refresh
         saved_item = content_repository.save(existing_item)
         mock_session.merge.assert_called_once_with(existing_item)
         mock_session.commit.assert_called_once()
@@ -131,8 +143,10 @@ class TestContentRepository:
 
     def test_save_no_refresh(self, content_repository, mock_session):
         new_item = MagicMock(spec=ContentItem, id=None)
+
         def set_id_side_effect(*args, **kwargs):
             new_item.id = 1
+
         mock_session.add.side_effect = set_id_side_effect
         saved_item = content_repository.save(new_item, refresh=False)
         mock_session.add.assert_called_once_with(new_item)
@@ -148,7 +162,9 @@ class TestContentRepository:
 
     def test_delete(self, content_repository, mock_session):
         mock_item = MagicMock(spec=ContentItem, id=1)
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_item
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_item
+        )
         result = content_repository.delete(1)
         mock_session.delete.assert_called_once_with(mock_item)
         mock_session.commit.assert_called_once()
@@ -162,10 +178,13 @@ class TestContentRepository:
         assert result is False
 
     def test_delete_sqlalchemy_error(self, content_repository, mock_session):
-        mock_session.query.return_value.filter.return_value.first.side_effect = SQLAlchemyError("Delete error")
+        mock_session.query.return_value.filter.return_value.first.side_effect = (
+            SQLAlchemyError("Delete error")
+        )
         with pytest.raises(SQLAlchemyError, match="Delete error"):
             content_repository.delete(1)
         mock_session.rollback.assert_called_once()
+
 
 # Tests for ContentRepositoryFactory
 class TestContentRepositoryFactory:

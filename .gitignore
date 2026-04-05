@@ -218,6 +218,7 @@ src/ai_content_classifier/app_settings.db-shm
 src/ai_content_classifier/app_settings.db-wal
 
 # Local databases and sqlite artifacts
+.codex
 app_settings.db*
 test_db.sqlite-shm
 

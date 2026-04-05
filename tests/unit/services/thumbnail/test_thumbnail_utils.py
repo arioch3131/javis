@@ -26,6 +26,7 @@ from ai_content_classifier.services.thumbnail.utils import (
     sanitize_filename,
 )
 
+
 class TestThumbnailUtils(unittest.TestCase):
     """Test cases for thumbnail utilities."""
 
@@ -61,15 +62,15 @@ class TestThumbnailUtils(unittest.TestCase):
         """Clean up test fixtures."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @mock.patch('os.path.getsize', side_effect=OSError('mocked error'))
+    @mock.patch("os.path.getsize", side_effect=OSError("mocked error"))
     def test_safe_get_file_size_exception(self, mock_getsize):
         self.assertEqual(safe_get_file_size(self.test_file), 0)
 
-    @mock.patch('os.path.isfile', side_effect=OSError('mocked error'))
+    @mock.patch("os.path.isfile", side_effect=OSError("mocked error"))
     def test_safe_file_exists_exception(self, mock_isfile):
         self.assertFalse(safe_file_exists(self.test_file))
 
-    @mock.patch('os.path.isdir', side_effect=OSError('mocked error'))
+    @mock.patch("os.path.isdir", side_effect=OSError("mocked error"))
     def test_safe_is_directory_exception(self, mock_isdir):
         self.assertFalse(safe_is_directory(self.temp_dir))
 
@@ -92,7 +93,7 @@ class TestThumbnailUtils(unittest.TestCase):
     def test_safe_get_mime_type(self):
         self.assertEqual(safe_get_mime_type(self.image_file), "image/jpeg")
         self.assertIsNone(safe_get_mime_type("file.unknownextension"))
-        with mock.patch('mimetypes.guess_type', side_effect=Exception('mocked error')):
+        with mock.patch("mimetypes.guess_type", side_effect=Exception("mocked error")):
             self.assertIsNone(safe_get_mime_type(self.test_file))
 
     def test_validate_image_path(self):
@@ -101,7 +102,9 @@ class TestThumbnailUtils(unittest.TestCase):
         self.assertFalse(validate_image_path("   ")[0])
         self.assertFalse(validate_image_path("nonexistent.jpg")[0])
         self.assertFalse(validate_image_path(self.no_ext_file)[0])
-        with self.assertLogs('ai_content_classifier.services.thumbnail.utils', level='DEBUG') as cm:
+        with self.assertLogs(
+            "ai_content_classifier.services.thumbnail.utils", level="DEBUG"
+        ) as cm:
             is_valid, error = validate_image_path(self.raw_image_file)
             self.assertTrue(is_valid)
             self.assertIn("Unusual image extension", cm.output[0])
@@ -125,9 +128,9 @@ class TestThumbnailUtils(unittest.TestCase):
         self.assertEqual(format_file_size(500), "500 B")
         self.assertEqual(format_file_size(0), "0 B")
         self.assertEqual(format_file_size(1024), "1.0 KB")
-        self.assertEqual(format_file_size(1024*1024), "1.0 MB")
+        self.assertEqual(format_file_size(1024 * 1024), "1.0 MB")
 
-    @mock.patch('os.makedirs', side_effect=OSError('mocked error'))
+    @mock.patch("os.makedirs", side_effect=OSError("mocked error"))
     def test_create_directory_safely_exception(self, mock_makedirs):
         self.assertFalse(create_directory_safely("new_dir"))
 
@@ -136,7 +139,7 @@ class TestThumbnailUtils(unittest.TestCase):
         self.assertTrue(create_directory_safely(new_dir))
         self.assertTrue(os.path.isdir(new_dir))
 
-    @mock.patch('os.path.getmtime', side_effect=OSError('mocked error'))
+    @mock.patch("os.path.getmtime", side_effect=OSError("mocked error"))
     def test_get_cache_key_exception(self, mock_getmtime):
         key = get_cache_key(self.image_file, (128, 128))
         self.assertIsNotNone(key)
@@ -150,19 +153,26 @@ class TestThumbnailUtils(unittest.TestCase):
         self.assertTrue(is_image_file("test.jpg"))
         self.assertFalse(is_image_file("test.txt"))
         self.assertTrue(is_image_file(self.image_file, check_content=True))
-        with mock.patch('ai_content_classifier.services.thumbnail.utils.safe_get_mime_type', return_value='application/zip'):
+        with mock.patch(
+            "ai_content_classifier.services.thumbnail.utils.safe_get_mime_type",
+            return_value="application/zip",
+        ):
             self.assertFalse(is_image_file(self.image_file, check_content=True))
 
-    @mock.patch('os.walk', side_effect=OSError('mocked error'))
+    @mock.patch("os.walk", side_effect=OSError("mocked error"))
     def test_get_image_files_in_directory_exception(self, mock_walk):
-        self.assertEqual(get_image_files_in_directory(self.temp_dir, recursive=True), [])
+        self.assertEqual(
+            get_image_files_in_directory(self.temp_dir, recursive=True), []
+        )
 
     def test_get_image_files_in_directory(self):
         # Non-recursive, max_files
         files = get_image_files_in_directory(self.temp_dir, max_files=2)
         self.assertEqual(len(files), 2)
         # Recursive, max_files
-        files_recursive = get_image_files_in_directory(self.temp_dir, recursive=True, max_files=3)
+        files_recursive = get_image_files_in_directory(
+            self.temp_dir, recursive=True, max_files=3
+        )
         self.assertEqual(len(files_recursive), 3)
 
     def test_get_image_files_in_invalid_directory(self):
@@ -171,15 +181,22 @@ class TestThumbnailUtils(unittest.TestCase):
     def test_calculate_aspect_ratio_size(self):
         original = (1920, 1080)
         target = (200, 200)
-        self.assertEqual(calculate_aspect_ratio_size(original, target, "contain"), (200, 112))
-        self.assertEqual(calculate_aspect_ratio_size(original, target, "cover"), (355, 200))
-        self.assertEqual(calculate_aspect_ratio_size((0,0), target), target)
+        self.assertEqual(
+            calculate_aspect_ratio_size(original, target, "contain"), (200, 112)
+        )
+        self.assertEqual(
+            calculate_aspect_ratio_size(original, target, "cover"), (355, 200)
+        )
+        self.assertEqual(calculate_aspect_ratio_size((0, 0), target), target)
         with self.assertRaises(ValueError):
             calculate_aspect_ratio_size(original, target, "invalid")
 
     def test_sanitize_filename(self):
-        self.assertEqual(sanitize_filename('a'*300+'.txt', max_length=10), 'aaaaaa.txt')
-        self.assertEqual(sanitize_filename('\x01\x02\x03'), 'thumbnail')
+        self.assertEqual(
+            sanitize_filename("a" * 300 + ".txt", max_length=10), "aaaaaa.txt"
+        )
+        self.assertEqual(sanitize_filename("\x01\x02\x03"), "thumbnail")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

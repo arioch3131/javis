@@ -26,17 +26,26 @@ class TestEnhancedContentReader:
         return MagicMock()
 
     @pytest.fixture
-    def reader(self, mock_db_service, mock_query_optimizer, mock_metrics, mock_legacy_reader):
+    def reader(
+        self, mock_db_service, mock_query_optimizer, mock_metrics, mock_legacy_reader
+    ):
         with patch(
             "ai_content_classifier.services.database.operations.enhanced_reader.ContentReader",
             return_value=mock_legacy_reader,
         ) as patched_reader:
-            enhanced = EnhancedContentReader(mock_db_service, mock_query_optimizer, mock_metrics)
+            enhanced = EnhancedContentReader(
+                mock_db_service, mock_query_optimizer, mock_metrics
+            )
             enhanced._patched_content_reader = patched_reader
             return enhanced
 
     def test_init_wires_dependencies_and_builds_legacy_reader(
-        self, reader, mock_db_service, mock_query_optimizer, mock_metrics, mock_legacy_reader
+        self,
+        reader,
+        mock_db_service,
+        mock_query_optimizer,
+        mock_metrics,
+        mock_legacy_reader,
     ):
         assert reader.database_service is mock_db_service
         assert reader.query_optimizer is mock_query_optimizer
@@ -82,7 +91,10 @@ class TestEnhancedContentReader:
         fake_session = MagicMock()
         mock_legacy_reader.find_items.return_value = expected
 
-        with patch.object(reader, "_build_cache_key", return_value="cache-key") as key_builder:
+        with patch.object(
+            reader, "_build_cache_key", return_value="cache-key"
+        ) as key_builder:
+
             def _exec(query_builder, cache_key):
                 assert cache_key == "cache-key"
                 return query_builder(fake_session)

@@ -8,7 +8,7 @@ optimized for SQLite databases.
 Key Features:
 - **Optimized SQLite Connections**: Configures SQLite for enhanced performance and concurrency.
 - **Connection Pooling**: Manages a pool of database connections to reduce overhead.
-- **Automatic Table Creation**: Automatically creates database tables based on ORM models.
+- **Versioned Schema Management**: Applies Alembic migrations to keep schema up to date.
 - **Contextual Session Management**: Provides a context manager for safe and efficient
   database session handling, including automatic commit/rollback.
 """
@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 from ai_content_classifier.core.logger import LoggableMixin
-from ai_content_classifier.models.base import Base
+from ai_content_classifier.services.database.migrations import run_migrations
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as SASession, scoped_session, sessionmaker
@@ -56,7 +56,7 @@ class DatabaseService(LoggableMixin):
 
         This method sets up the connection to the SQLite database, configures
         connection pooling, applies performance-enhancing pragmas for SQLite,
-        and creates all necessary database tables if they do not already exist.
+        and applies Alembic migrations to reach the latest schema version.
 
         Raises:
             SQLAlchemyError: If there is an issue during database engine creation or initialization.
@@ -103,9 +103,8 @@ class DatabaseService(LoggableMixin):
                 finally:
                     cursor.close()
 
-            # Create all defined database tables based on the SQLAlchemy Base metadata.
-            Base.metadata.create_all(self.engine)
-            self._apply_schema_updates()
+            # Apply versioned schema changes through Alembic.
+            run_migrations(engine=self.engine, db_path=self.db_path)
 
             # Create a thread-local session factory.
             self.Session = scoped_session(sessionmaker(bind=self.engine))
@@ -114,21 +113,6 @@ class DatabaseService(LoggableMixin):
         except SQLAlchemyError as e:
             self.logger.error(f"Failed to initialize database engine: {e}")
             raise
-
-    def _apply_schema_updates(self) -> None:
-        """Applies lightweight schema updates for legacy SQLite databases."""
-        with self.engine.begin() as connection:
-            columns = connection.exec_driver_sql(
-                "PRAGMA table_info(content_items)"
-            ).fetchall()
-            column_names = {column[1] for column in columns}
-            if "classification_confidence" not in column_names:
-                connection.exec_driver_sql(
-                    "ALTER TABLE content_items ADD COLUMN classification_confidence FLOAT"
-                )
-                self.logger.info(
-                    "Applied schema update: added content_items.classification_confidence"
-                )
 
     @contextmanager
     def get_session(self) -> Generator[SASession, None, None]:

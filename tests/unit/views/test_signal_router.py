@@ -14,4 +14,3 @@ def test_connection_status_updates_llm_chip_state():
         "Connected to Ollama v0.6.0",
         is_connected=True,
     )
-

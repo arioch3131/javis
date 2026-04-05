@@ -4,6 +4,7 @@ from sqlalchemy.orm import declarative_base
 
 from ai_content_classifier.models.base import Base, logger as base_logger
 
+
 class TestBase:
     def test_base_is_declarative_base(self):
         assert isinstance(Base, type(declarative_base()))

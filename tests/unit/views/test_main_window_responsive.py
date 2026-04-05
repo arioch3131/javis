@@ -79,7 +79,10 @@ def test_apply_responsive_layout_hides_secondary_panels_on_small_windows():
     builder.widgets["filter_sidebar"].set_compact_mode.assert_called_with(False)
     builder.widgets["top_row_splitter"].setSizes.assert_called_once()
     builder.widgets["main_splitter"].setSizes.assert_called_once()
-    assert [button.setText.call_args.args[0] for button in builder.widgets["view_mode_buttons"]] == ["G", "L", "C"]
+    assert [
+        button.setText.call_args.args[0]
+        for button in builder.widgets["view_mode_buttons"]
+    ] == ["G", "L", "C"]
 
 
 def test_apply_responsive_layout_keeps_sidebar_in_wide_mode():
@@ -94,7 +97,9 @@ def test_apply_responsive_layout_keeps_sidebar_in_wide_mode():
     builder.widgets["left_panel"].setVisible.assert_called_with(True)
     builder.widgets["filter_sidebar"].set_compact_mode.assert_called_with(False)
     builder.widgets["sort_combo"].setVisible.assert_called_with(True)
-    assert builder.widgets["scan_folder_button"].setText.call_args.args[0] == "Scan Folder"
+    assert (
+        builder.widgets["scan_folder_button"].setText.call_args.args[0] == "Scan Folder"
+    )
 
 
 def test_apply_responsive_layout_uses_compact_sidebar_before_hiding_it():
@@ -109,7 +114,10 @@ def test_apply_responsive_layout_uses_compact_sidebar_before_hiding_it():
     builder.widgets["size_slider_label"].setText.assert_called_with("Thumbs")
     assert builder.widgets["advanced_scan_button"].setText.call_args.args[0] == "More"
     assert builder.widgets["categorize_button"].setText.call_args.args[0] == "Classify"
-    assert [button.setText.call_args.args[0] for button in builder.widgets["view_mode_buttons"]] == [
+    assert [
+        button.setText.call_args.args[0]
+        for button in builder.widgets["view_mode_buttons"]
+    ] == [
         "Grid",
         "List",
         "Cols",
@@ -123,7 +131,9 @@ def test_apply_responsive_layout_hides_header_subtitle_in_medium_mode():
 
     assert mode == "medium"
     builder.widgets["action_bar_subtitle"].setVisible.assert_called_with(False)
-    assert builder.widgets["scan_folder_button"].setText.call_args.args[0] == "Scan Folder"
+    assert (
+        builder.widgets["scan_folder_button"].setText.call_args.args[0] == "Scan Folder"
+    )
 
 
 def test_update_file_statistics_tolerates_missing_optional_stats_labels():
@@ -176,7 +186,9 @@ def test_status_presenter_updates_main_and_progress_chips():
 
     presenter.update_status("Scanning...", is_busy=True)
 
-    main_window.set_main_status_chip.assert_called_once_with("Scanning...", is_busy=True)
+    main_window.set_main_status_chip.assert_called_once_with(
+        "Scanning...", is_busy=True
+    )
     main_window.set_progress_status_chip.assert_called_once_with(
         "Scanning...",
         is_busy=True,

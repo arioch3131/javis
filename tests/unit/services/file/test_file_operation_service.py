@@ -47,7 +47,9 @@ class TestFileOperationService:
 
     def test_process_scan_results_exception(self, service):
         errors = []
-        service.set_callbacks(on_scan_error=errors.append, on_scan_completed=lambda _x: 1 / 0)
+        service.set_callbacks(
+            on_scan_error=errors.append, on_scan_completed=lambda _x: 1 / 0
+        )
         service.process_scan_results([("/a.jpg", "/")])
         assert len(errors) == 1
         assert "processing scan results" in errors[0].lower()
@@ -55,7 +57,9 @@ class TestFileOperationService:
     def test_process_file_result_updates_stats_and_callback(self, service):
         processed = []
         service.set_callbacks(on_file_processed=processed.append)
-        service.process_file_result("/a.jpg", metadata_ok=True, thumbnail_ok=False, error_message="e")
+        service.process_file_result(
+            "/a.jpg", metadata_ok=True, thumbnail_ok=False, error_message="e"
+        )
         assert service.last_scan_stats.metadata_extracted == 1
         assert service.last_scan_stats.thumbnails_generated == 0
         assert service.last_scan_stats.errors == 1
@@ -97,14 +101,18 @@ class TestFileOperationService:
         assert service.apply_filter(FilterType.MULTI_EXTENSION) == [("/a.jpg", "/")]
 
     def test_apply_filter_uncategorized_uses_helper(self, service):
-        with patch.object(service, "_filter_uncategorized", return_value=[("/u", "/")]) as helper:
+        with patch.object(
+            service, "_filter_uncategorized", return_value=[("/u", "/")]
+        ) as helper:
             result = service.apply_filter(FilterType.UNCATEGORIZED)
         assert result == [("/u", "/")]
         helper.assert_called_once()
 
     def test_apply_filter_standard_types_query_database(self, service):
         fake_filter = MagicMock()
-        service.db_service.find_items.return_value = [SimpleNamespace(path="/i.jpg", directory="/d")]
+        service.db_service.find_items.return_value = [
+            SimpleNamespace(path="/i.jpg", directory="/d")
+        ]
         with patch(
             "ai_content_classifier.services.file.file_operation_service.ContentFilter",
             return_value=fake_filter,
@@ -121,8 +129,12 @@ class TestFileOperationService:
             def __eq__(self, _other):
                 return False
 
-        service.db_service.find_items.return_value = [SimpleNamespace(path="/db", directory="/")]
-        with patch.object(service, "_filter_files_by_type", return_value=[("/f", "/")]) as helper:
+        service.db_service.find_items.return_value = [
+            SimpleNamespace(path="/db", directory="/")
+        ]
+        with patch.object(
+            service, "_filter_files_by_type", return_value=[("/f", "/")]
+        ) as helper:
             result = service.apply_filter(UnknownFilter())
         helper.assert_called_once()
         # Current implementation still issues a DB query when `content_filter` exists in locals().
@@ -136,7 +148,9 @@ class TestFileOperationService:
 
     def test_apply_filter_to_list_for_categories(self, service):
         files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.get_content_by_path.return_value = SimpleNamespace(category="Uncategorized")
+        service.db_service.get_content_by_path.return_value = SimpleNamespace(
+            category="Uncategorized"
+        )
         assert service.apply_filter_to_list(files, FilterType.ALL_FILES) == files
         assert service.apply_filter_to_list(files, FilterType.UNCATEGORIZED) == files
 
@@ -146,7 +160,9 @@ class TestFileOperationService:
             "ai_content_classifier.services.file.file_operation_service.FileTypeService.is_image_file",
             side_effect=lambda p: p.endswith(".jpg"),
         ):
-            assert service.apply_filter_to_list(files, FilterType.IMAGES) == [("/a.jpg", "/")]
+            assert service.apply_filter_to_list(files, FilterType.IMAGES) == [
+                ("/a.jpg", "/")
+            ]
         with patch(
             "ai_content_classifier.services.file.file_operation_service.FileTypeService.get_file_category",
             return_value=FileCategory.OTHER,
@@ -156,17 +172,51 @@ class TestFileOperationService:
     def test_apply_multi_filters_to_list(self, service):
         files = [("/a.jpg", "/"), ("/b.pdf", "/")]
         service.db_service.get_content_by_path.side_effect = [
-            SimpleNamespace(category="Work", year_taken=2020, date_created=None, date_modified=None, date_indexed=None, content_metadata=None),
-            SimpleNamespace(category="Personal", year_taken=None, date_created=SimpleNamespace(year=2021), date_modified=None, date_indexed=None, content_metadata=None),
+            SimpleNamespace(
+                category="Work",
+                year_taken=2020,
+                date_created=None,
+                date_modified=None,
+                date_indexed=None,
+                content_metadata=None,
+            ),
+            SimpleNamespace(
+                category="Personal",
+                year_taken=None,
+                date_created=SimpleNamespace(year=2021),
+                date_modified=None,
+                date_indexed=None,
+                content_metadata=None,
+            ),
         ]
-        assert service.apply_multi_category_filter_to_list(files, ["Work"]) == [("/a.jpg", "/")]
+        assert service.apply_multi_category_filter_to_list(files, ["Work"]) == [
+            ("/a.jpg", "/")
+        ]
 
         service.db_service.get_content_by_path.side_effect = [
-            SimpleNamespace(category="X", year_taken=2020, date_created=None, date_modified=None, date_indexed=None, content_metadata=None),
-            SimpleNamespace(category="Y", year_taken=None, date_created=SimpleNamespace(year=2021), date_modified=None, date_indexed=None, content_metadata=None),
+            SimpleNamespace(
+                category="X",
+                year_taken=2020,
+                date_created=None,
+                date_modified=None,
+                date_indexed=None,
+                content_metadata=None,
+            ),
+            SimpleNamespace(
+                category="Y",
+                year_taken=None,
+                date_created=SimpleNamespace(year=2021),
+                date_modified=None,
+                date_indexed=None,
+                content_metadata=None,
+            ),
         ]
-        assert service.apply_multi_year_filter_to_list(files, [2021]) == [("/b.pdf", "/")]
-        assert service.apply_multi_extension_filter_to_list(files, ["jpg"]) == [("/a.jpg", "/")]
+        assert service.apply_multi_year_filter_to_list(files, [2021]) == [
+            ("/b.pdf", "/")
+        ]
+        assert service.apply_multi_extension_filter_to_list(files, ["jpg"]) == [
+            ("/a.jpg", "/")
+        ]
 
     def test_private_filters_and_utilities(self, service):
         service.db_service.find_items.return_value = [
@@ -195,7 +245,9 @@ class TestFileOperationService:
 
     def test_get_file_count_by_type_properties_and_cleanup(self, service):
         service._current_files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        with patch.object(service, "_filter_files_by_type", return_value=[("/a.jpg", "/")]):
+        with patch.object(
+            service, "_filter_files_by_type", return_value=[("/a.jpg", "/")]
+        ):
             counts = service.get_file_count_by_type()
         assert counts["All Files"] == 2
         assert "multi_category" not in counts

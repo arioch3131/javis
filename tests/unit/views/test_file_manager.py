@@ -100,7 +100,13 @@ def test_push_scan_operation_state_updates_main_window_operations_panel():
     operation_state = manager.main_window.show_operation_state.call_args.args[0]
     assert operation_state.kind == "scan"
     assert operation_state.summary == "3942 files scanned"
+    assert operation_state.title == "Scanning: /tmp"
     assert operation_state.primary_action == "cancel"
+    assert operation_state.current_item == "Root directory: /tmp"
+    assert any(
+        detail.label == "Scanned" and detail.value == "/tmp"
+        for detail in operation_state.details
+    )
 
 
 def test_append_scan_operation_log_preserves_latest_scan_snapshot():
@@ -123,7 +129,14 @@ def test_append_scan_operation_log_preserves_latest_scan_snapshot():
 
     operation_state = manager.main_window.show_operation_state.call_args.args[0]
     assert operation_state.summary == "3942 files scanned"
-    assert any(detail.label == "Rate" and detail.value == "58.7 items/s" for detail in operation_state.details)
+    assert any(
+        detail.label == "Rate" and detail.value == "58.7 items/s"
+        for detail in operation_state.details
+    )
+    assert any(
+        detail.label == "Scanned" and detail.value == "/tmp"
+        for detail in operation_state.details
+    )
 
 
 def test_push_scan_operation_state_uses_integrated_start_time_for_elapsed():
@@ -164,3 +177,70 @@ def test_push_scan_operation_state_uses_completed_title_when_finished():
     assert operation_state.title == "Scan completed"
     assert operation_state.summary == "24 files found"
     assert operation_state.secondary_action == "close"
+
+
+def test_push_scan_operation_state_title_shows_root_plus_first_subdirectory():
+    manager = FileManager.__new__(FileManager)
+    manager.main_window = MagicMock()
+    manager._scan_operation_log = []
+    manager._scan_operation_snapshot = {
+        "scan_root_directory": "/data/source",
+    }
+    manager.scan_progress_dialog = None
+
+    progress = type(
+        "Progress",
+        (),
+        {
+            "files_found": 10,
+            "files_processed": 1,
+            "total_files_scanned": 32,
+            "current_directory": "/data/source/projects/2026/april",
+            "current_file": "/data/source/projects/2026/april/report.pdf",
+            "scan_speed": 8.4,
+            "estimated_total_files": 0,
+            "errors": 0,
+        },
+    )()
+
+    manager._push_scan_operation_state(progress=progress)
+
+    operation_state = manager.main_window.show_operation_state.call_args.args[0]
+    assert operation_state.title == "Scanning: /data/source/projects"
+
+
+def test_refresh_and_emit_visible_files_emits_refreshed_list_when_no_filters():
+    manager = FileManager.__new__(FileManager)
+    manager.file_service = MagicMock()
+    manager.file_service.refresh_file_list.return_value = [("/tmp/a.png", "/tmp")]
+    manager.files_updated = MagicMock()
+    manager._active_filters = {
+        "file_type": [],
+        "category": [],
+        "year": [],
+        "extension": [],
+    }
+
+    result = manager.refresh_and_emit_visible_files()
+
+    assert result == [("/tmp/a.png", "/tmp")]
+    manager.files_updated.emit.assert_called_once_with([("/tmp/a.png", "/tmp")])
+
+
+def test_refresh_and_emit_visible_files_reapplies_filters_when_active():
+    manager = FileManager.__new__(FileManager)
+    manager.file_service = MagicMock()
+    manager.file_service.refresh_file_list.return_value = [("/tmp/a.png", "/tmp")]
+    manager.files_updated = MagicMock()
+    manager._active_filters = {
+        "file_type": [],
+        "category": ["Animals"],
+        "year": [],
+        "extension": [],
+    }
+    manager._apply_cumulative_filters = MagicMock(return_value=[("/tmp/b.png", "/tmp")])
+
+    result = manager.refresh_and_emit_visible_files()
+
+    assert result == [("/tmp/b.png", "/tmp")]
+    manager._apply_cumulative_filters.assert_called_once()

@@ -93,7 +93,9 @@ def test_handle_remove_filtered_results_request_uses_displayed_files(monkeypatch
     handler.main_window = MagicMock()
     handler.file_manager = MagicMock()
     handler.file_manager.remove_files_from_database.return_value = 1
-    handler._get_current_files_list = MagicMock(return_value=[("/tmp/visible.png", "/tmp")])
+    handler._get_current_files_list = MagicMock(
+        return_value=[("/tmp/visible.png", "/tmp")]
+    )
 
     monkeypatch.setattr(
         ui_event_handler_module.QMessageBox,
@@ -116,7 +118,9 @@ def test_handle_remove_filtered_results_request_stops_when_user_declines(monkeyp
     handler.logger = MagicMock()
     handler.main_window = MagicMock()
     handler.file_manager = MagicMock()
-    handler._get_current_files_list = MagicMock(return_value=[("/tmp/visible.png", "/tmp")])
+    handler._get_current_files_list = MagicMock(
+        return_value=[("/tmp/visible.png", "/tmp")]
+    )
 
     monkeypatch.setattr(
         ui_event_handler_module.QMessageBox,
@@ -134,7 +138,10 @@ def test_handle_category_filter_request_preselects_existing_categories(monkeypat
     handler.logger = MagicMock()
     handler.main_window = MagicMock()
     handler.content_database_service = MagicMock()
-    handler.content_database_service.get_unique_categories.return_value = ["Animals", "Space"]
+    handler.content_database_service.get_unique_categories.return_value = [
+        "Animals",
+        "Space",
+    ]
     handler.file_manager = MagicMock()
     handler.file_manager.get_active_filters.return_value = {"category": ["Space"]}
 
@@ -188,7 +195,10 @@ def test_handle_extension_filter_request_preselects_existing_extensions(monkeypa
     handler.logger = MagicMock()
     handler.main_window = MagicMock()
     handler.content_database_service = MagicMock()
-    handler.content_database_service.get_unique_extensions.return_value = [".jpg", ".png"]
+    handler.content_database_service.get_unique_extensions.return_value = [
+        ".jpg",
+        ".png",
+    ]
     handler.file_manager = MagicMock()
     handler.file_manager.get_active_filters.return_value = {"extension": [".png"]}
 

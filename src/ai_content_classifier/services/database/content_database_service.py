@@ -197,6 +197,11 @@ class ContentDatabaseService(LoggableMixin):
     ) -> List[ContentItem]:
         return self.reader.get_uncategorized_items(content_type, session)
 
+    def clear_content_category(
+        self, file_path: str, session: Optional[Session] = None
+    ) -> Optional[ContentItem]:
+        return self.writer.clear_content_category(file_path, session)
+
     def get_unique_categories(self) -> List[str]:
         return self.reader.get_unique_categories()
 

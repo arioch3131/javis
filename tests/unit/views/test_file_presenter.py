@@ -83,3 +83,51 @@ def test_save_thumbnail_uses_centralized_cache_directory(tmp_path, monkeypatch):
     assert os.path.exists(output_path)
     assert f"{os.sep}.thumbnails{os.sep}" not in output_path
     assert str(cache_root / "Javis" / "thumbnails") in output_path
+
+
+def test_clear_category_request_updates_db_details_and_visible_files():
+    main_window = MagicMock()
+    main_window.file_manager = MagicMock()
+    presenter = FilePresenter(main_window, MagicMock())
+    presenter._details_dialog = MagicMock()
+    presenter._details_dialog_path = "/tmp/red-panda.jpg"
+    presenter.db_service.clear_content_category = MagicMock(return_value=MagicMock())
+    presenter._build_file_details = MagicMock(
+        return_value={
+            "file_path": "/tmp/red-panda.jpg",
+            "classification": {"category": "Uncategorized"},
+        }
+    )
+
+    presenter._on_clear_category_requested("/tmp/red-panda.jpg")
+
+    presenter.db_service.clear_content_category.assert_called_once_with(
+        "/tmp/red-panda.jpg"
+    )
+    presenter._details_dialog.set_file_details.assert_called_once()
+    main_window.file_manager.refresh_and_emit_visible_files.assert_called_once()
+
+
+def test_clear_category_request_ignores_empty_path():
+    presenter = FilePresenter(MagicMock(), MagicMock())
+    presenter.db_service.clear_content_category = MagicMock()
+
+    presenter._on_clear_category_requested("")
+
+    presenter.db_service.clear_content_category.assert_not_called()
+
+
+def test_clear_category_request_stops_when_item_not_found():
+    main_window = MagicMock()
+    main_window.file_manager = MagicMock()
+    presenter = FilePresenter(main_window, MagicMock())
+    presenter._details_dialog = MagicMock()
+    presenter._details_dialog_path = "/tmp/missing.jpg"
+    presenter.db_service.clear_content_category = MagicMock(return_value=None)
+    presenter.refresh_file_list = MagicMock()
+
+    presenter._on_clear_category_requested("/tmp/missing.jpg")
+
+    presenter._details_dialog.set_file_details.assert_not_called()
+    main_window.file_manager.refresh_and_emit_visible_files.assert_not_called()
+    presenter.refresh_file_list.assert_not_called()

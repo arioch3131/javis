@@ -7,8 +7,14 @@ from sqlalchemy.exc import IntegrityError
 
 from ai_content_classifier.models.base import Base
 from ai_content_classifier.models.content_models import (
-    Tag, Collection, ContentItem, Image, Document, Video, Audio,
-    datetime_utcnow
+    Tag,
+    Collection,
+    ContentItem,
+    Image,
+    Document,
+    Video,
+    Audio,
+    datetime_utcnow,
 )
 
 
@@ -34,7 +40,7 @@ class TestContentModels:
         tag = Tag(name="Work")
         db_session.add(tag)
         db_session.commit()
-        
+
         assert tag.id is not None
         assert tag.name == "Work"
         assert str(tag) == f"<Tag(id={tag.id}, name='Work')>"
@@ -43,10 +49,10 @@ class TestContentModels:
         """Test that Tag names must be unique."""
         tag1 = Tag(name="Work")
         tag2 = Tag(name="Work")
-        
+
         db_session.add(tag1)
         db_session.commit()
-        
+
         db_session.add(tag2)
         with pytest.raises(IntegrityError):
             db_session.commit()
@@ -54,12 +60,11 @@ class TestContentModels:
     def test_collection_creation(self, db_session):
         """Test Collection model creation and basic functionality."""
         collection = Collection(
-            name="My Photos",
-            description="Collection of personal photos"
+            name="My Photos", description="Collection of personal photos"
         )
         db_session.add(collection)
         db_session.commit()
-        
+
         assert collection.id is not None
         assert collection.name == "My Photos"
         assert collection.description == "Collection of personal photos"
@@ -72,18 +77,18 @@ class TestContentModels:
         """Test hierarchical collections (parent-child relationships)."""
         parent = Collection(name="Parent Collection")
         child = Collection(name="Child Collection")
-        
+
         db_session.add(parent)
         db_session.commit()
-        
+
         child.parent_id = parent.id
         db_session.add(child)
         db_session.commit()
-        
+
         # Refresh to get relationships
         db_session.refresh(parent)
         db_session.refresh(child)
-        
+
         assert child.parent_id == parent.id
         assert child.parent == parent
         assert child in parent.subcollections
@@ -96,11 +101,11 @@ class TestContentModels:
             directory="/path/to",
             content_type="content_item",
             file_size=1024,
-            file_hash="abc123"
+            file_hash="abc123",
         )
         db_session.add(content)
         db_session.commit()
-        
+
         assert content.id is not None
         assert content.uuid is not None
         assert len(content.uuid) == 36  # UUID4 format
@@ -113,7 +118,10 @@ class TestContentModels:
         assert content.date_created is not None
         assert content.date_indexed is not None
         assert content.metadata_extracted is False
-        assert str(content) == f"<ContentItem(id={content.id}, path='/path/to/file.txt', type='content_item')>"
+        assert (
+            str(content)
+            == f"<ContentItem(id={content.id}, path='/path/to/file.txt', type='content_item')>"
+        )
 
     def test_content_item_unique_path(self, db_session):
         """Test that ContentItem paths must be unique."""
@@ -121,18 +129,18 @@ class TestContentModels:
             path="/path/to/file.txt",
             filename="file.txt",
             directory="/path/to",
-            content_type="content_item"
+            content_type="content_item",
         )
         content2 = ContentItem(
             path="/path/to/file.txt",
             filename="file.txt",
             directory="/path/to",
-            content_type="content_item"
+            content_type="content_item",
         )
-        
+
         db_session.add(content1)
         db_session.commit()
-        
+
         db_session.add(content2)
         with pytest.raises(IntegrityError):
             db_session.commit()
@@ -146,13 +154,15 @@ class TestContentModels:
             width=None,  # Test None handling
             height=None,
             format="jpeg",
-            year_taken=2023
+            year_taken=2023,
         )
         db_session.add(image)
         db_session.commit()
-        
+
         # The repr should handle None dimensions gracefully
-        expected_repr = f"<Image(id={image.id}, path='/path/to/image.jpg', dimensions='NonexNone')>"
+        expected_repr = (
+            f"<Image(id={image.id}, path='/path/to/image.jpg', dimensions='NonexNone')>"
+        )
         # This might actually fail - the repr method might need improvement
 
     def test_document_creation(self, db_session):
@@ -163,16 +173,19 @@ class TestContentModels:
             directory="/path/to",
             language="en",
             page_count=10,
-            text_content="This is the extracted text content."
+            text_content="This is the extracted text content.",
         )
         db_session.add(document)
         db_session.commit()
-        
+
         assert document.content_type == "document"
         assert document.language == "en"
         assert document.page_count == 10
         assert document.text_content == "This is the extracted text content."
-        assert str(document) == f"<Document(id={document.id}, path='/path/to/document.pdf', pages=10)>"
+        assert (
+            str(document)
+            == f"<Document(id={document.id}, path='/path/to/document.pdf', pages=10)>"
+        )
 
     def test_video_creation(self, db_session):
         """Test Video model creation and inheritance."""
@@ -183,17 +196,20 @@ class TestContentModels:
             width=1920,
             height=1080,
             duration=120,
-            format="mp4"
+            format="mp4",
         )
         db_session.add(video)
         db_session.commit()
-        
+
         assert video.content_type == "video"
         assert video.width == 1920
         assert video.height == 1080
         assert video.duration == 120
         assert video.format == "mp4"
-        assert str(video) == f"<Video(id={video.id}, path='/path/to/video.mp4', duration='120s')>"
+        assert (
+            str(video)
+            == f"<Video(id={video.id}, path='/path/to/video.mp4', duration='120s')>"
+        )
 
     def test_audio_creation(self, db_session):
         """Test Audio model creation and inheritance."""
@@ -204,44 +220,45 @@ class TestContentModels:
             duration=180,
             format="mp3",
             bit_rate=320,
-            sample_rate=44100
+            sample_rate=44100,
         )
         db_session.add(audio)
         db_session.commit()
-        
+
         assert audio.content_type == "audio"
         assert audio.duration == 180
         assert audio.format == "mp3"
         assert audio.bit_rate == 320
         assert audio.sample_rate == 44100
-        assert str(audio) == f"<Audio(id={audio.id}, path='/path/to/audio.mp3', duration='180s')>"
+        assert (
+            str(audio)
+            == f"<Audio(id={audio.id}, path='/path/to/audio.mp3', duration='180s')>"
+        )
 
     def test_content_item_tag_relationship(self, db_session):
         """Test many-to-many relationship between ContentItem and Tag."""
         # Create tags
         tag1 = Tag(name="Work")
         tag2 = Tag(name="Important")
-        
+
         # Create content item
         content = Image(
-            path="/path/to/image.jpg",
-            filename="image.jpg",
-            directory="/path/to"
+            path="/path/to/image.jpg", filename="image.jpg", directory="/path/to"
         )
-        
+
         db_session.add_all([tag1, tag2, content])
         db_session.commit()
-        
+
         # Add tags to content
         content.tags.append(tag1)
         content.tags.append(tag2)
         db_session.commit()
-        
+
         # Refresh and test relationships
         db_session.refresh(content)
         db_session.refresh(tag1)
         db_session.refresh(tag2)
-        
+
         assert len(content.tags) == 2
         assert tag1 in content.tags
         assert tag2 in content.tags
@@ -252,32 +269,28 @@ class TestContentModels:
         """Test many-to-many relationship between Collection and ContentItem."""
         # Create collection
         collection = Collection(name="My Images")
-        
+
         # Create content items
         image1 = Image(
-            path="/path/to/image1.jpg",
-            filename="image1.jpg",
-            directory="/path/to"
+            path="/path/to/image1.jpg", filename="image1.jpg", directory="/path/to"
         )
         image2 = Image(
-            path="/path/to/image2.jpg",
-            filename="image2.jpg",
-            directory="/path/to"
+            path="/path/to/image2.jpg", filename="image2.jpg", directory="/path/to"
         )
-        
+
         db_session.add_all([collection, image1, image2])
         db_session.commit()
-        
+
         # Add content to collection
         collection.contents.append(image1)
         collection.contents.append(image2)
         db_session.commit()
-        
+
         # Refresh and test relationships
         db_session.refresh(collection)
         db_session.refresh(image1)
         db_session.refresh(image2)
-        
+
         assert len(collection.contents) == 2
         assert image1 in collection.contents
         assert image2 in collection.contents
@@ -292,24 +305,16 @@ class TestContentModels:
             directory="/path/to",
             content_metadata={
                 "camera": "Canon EOS R5",
-                "settings": {
-                    "iso": 800,
-                    "aperture": "f/2.8",
-                    "shutter_speed": "1/60"
-                },
-                "location": {
-                    "latitude": 48.8566,
-                    "longitude": 2.3522,
-                    "city": "Paris"
-                }
-            }
+                "settings": {"iso": 800, "aperture": "f/2.8", "shutter_speed": "1/60"},
+                "location": {"latitude": 48.8566, "longitude": 2.3522, "city": "Paris"},
+            },
         )
         db_session.add(content)
         db_session.commit()
-        
+
         # Refresh and test metadata
         db_session.refresh(content)
-        
+
         assert content.content_metadata["camera"] == "Canon EOS R5"
         assert content.content_metadata["settings"]["iso"] == 800
         assert content.content_metadata["location"]["city"] == "Paris"
@@ -318,37 +323,31 @@ class TestContentModels:
         """Test polymorphic queries with single-table inheritance."""
         # Create different types of content
         image = Image(
-            path="/path/to/image.jpg",
-            filename="image.jpg",
-            directory="/path/to"
+            path="/path/to/image.jpg", filename="image.jpg", directory="/path/to"
         )
         document = Document(
-            path="/path/to/document.pdf",
-            filename="document.pdf",
-            directory="/path/to"
+            path="/path/to/document.pdf", filename="document.pdf", directory="/path/to"
         )
         video = Video(
-            path="/path/to/video.mp4",
-            filename="video.mp4",
-            directory="/path/to"
+            path="/path/to/video.mp4", filename="video.mp4", directory="/path/to"
         )
-        
+
         db_session.add_all([image, document, video])
         db_session.commit()
-        
+
         # Query all content items
         all_content = db_session.query(ContentItem).all()
         assert len(all_content) == 3
-        
+
         # Query specific types
         images = db_session.query(Image).all()
         documents = db_session.query(Document).all()
         videos = db_session.query(Video).all()
-        
+
         assert len(images) == 1
         assert len(documents) == 1
         assert len(videos) == 1
-        
+
         # Verify types
         assert isinstance(images[0], Image)
         assert isinstance(documents[0], Document)
@@ -360,16 +359,16 @@ class TestContentModels:
             path="/path/to/image.jpg",
             filename="image.jpg",
             directory="/path/to",
-            category="Work"
+            category="Work",
         )
         db_session.add(content)
         db_session.commit()
-        
+
         # Query by category
-        work_content = db_session.query(ContentItem).filter(
-            ContentItem.category == "Work"
-        ).all()
-        
+        work_content = (
+            db_session.query(ContentItem).filter(ContentItem.category == "Work").all()
+        )
+
         assert len(work_content) == 1
         assert work_content[0] == content
 
@@ -379,18 +378,18 @@ class TestContentModels:
             path="/test/file.txt",
             filename="file.txt",
             directory="/test",
-            content_type="content_item"
+            content_type="content_item",
         )
         db_session.add(content)
         db_session.commit()
-        
+
         original_created = content.date_created
         original_modified = content.date_modified
-        
+
         # Update the item
         content.filename = "updated_file.txt"
         db_session.commit()
-        
+
         assert content.date_created == original_created  # Should not change
         assert content.date_modified > original_modified  # Should be updated
 
@@ -400,18 +399,18 @@ class TestContentModels:
             path="/test/file1.txt",
             filename="file1.txt",
             directory="/test",
-            content_type="content_item"
+            content_type="content_item",
         )
         content2 = ContentItem(
             path="/test/file2.txt",
             filename="file2.txt",
             directory="/test",
-            content_type="content_item"
+            content_type="content_item",
         )
-        
+
         db_session.add_all([content1, content2])
         db_session.commit()
-        
+
         assert content1.uuid != content2.uuid
         assert len(content1.uuid) == 36
         assert len(content2.uuid) == 36
@@ -422,11 +421,11 @@ class TestContentModels:
             path="/test/file.txt",
             filename="file.txt",
             directory="/test",
-            content_type="content_item"
+            content_type="content_item",
         )
         db_session.add(content)
         db_session.commit()
-        
+
         # Test defaults
         assert content.metadata_extracted is False
         assert content.category is None
@@ -439,14 +438,14 @@ class TestContentModels:
         collection = Collection(name="Test Collection")
         db_session.add(collection)
         db_session.commit()
-        
+
         original_created = collection.date_created
         original_modified = collection.date_modified
-        
+
         # Update collection
         collection.description = "Updated description"
         db_session.commit()
-        
+
         assert collection.date_created == original_created
         assert collection.date_modified > original_modified
 
@@ -460,24 +459,28 @@ class TestContentModels:
                 directory="/test",
                 content_type="image" if i % 2 == 0 else "document",
                 category="Work" if i < 5 else "Personal",
-                metadata_extracted=i % 3 == 0
+                metadata_extracted=i % 3 == 0,
             )
             db_session.add(content)
         db_session.commit()
-        
+
         # Test indexed queries (these should be fast with proper indexes)
-        images = db_session.query(ContentItem).filter(
-            ContentItem.content_type == "image"
-        ).all()
-        
-        work_items = db_session.query(ContentItem).filter(
-            ContentItem.category == "Work"
-        ).all()
-        
-        extracted_items = db_session.query(ContentItem).filter(
-            ContentItem.metadata_extracted == True
-        ).all()
-        
+        images = (
+            db_session.query(ContentItem)
+            .filter(ContentItem.content_type == "image")
+            .all()
+        )
+
+        work_items = (
+            db_session.query(ContentItem).filter(ContentItem.category == "Work").all()
+        )
+
+        extracted_items = (
+            db_session.query(ContentItem)
+            .filter(ContentItem.metadata_extracted == True)
+            .all()
+        )
+
         # Verify results
         assert len(images) == 5
         assert len(work_items) == 5
@@ -486,52 +489,44 @@ class TestContentModels:
     def test_tag_content_removal(self, db_session):
         """Test removing tags from content and vice versa."""
         tag = Tag(name="Test Tag")
-        content = Image(
-            path="/test/image.jpg",
-            filename="image.jpg",
-            directory="/test"
-        )
-        
+        content = Image(path="/test/image.jpg", filename="image.jpg", directory="/test")
+
         db_session.add_all([tag, content])
         db_session.commit()
-        
+
         # Add relationship
         content.tags.append(tag)
         db_session.commit()
-        
+
         assert len(content.tags) == 1
         assert len(tag.content_items) == 1
-        
+
         # Remove relationship
         content.tags.remove(tag)
         db_session.commit()
-        
+
         assert len(content.tags) == 0
         assert len(tag.content_items) == 0
 
     def test_collection_content_removal(self, db_session):
         """Test removing content from collections."""
         collection = Collection(name="Test Collection")
-        content = Image(
-            path="/test/image.jpg",
-            filename="image.jpg",
-            directory="/test"
-        )
-        
+        content = Image(path="/test/image.jpg", filename="image.jpg", directory="/test")
+
         db_session.add_all([collection, content])
         db_session.commit()
-        
+
         # Add to collection
         collection.contents.append(content)
         db_session.commit()
-        
+
         assert len(collection.contents) == 1
         assert len(content.collections) == 1
-        
+
         # Remove from collection
         collection.contents.remove(content)
         db_session.commit()
-        
+
         assert len(collection.contents) == 0
         assert len(content.collections) == 0
 
@@ -539,33 +534,29 @@ class TestContentModels:
         """Test what happens when we delete related items."""
         # This test verifies the cascade behavior
         collection = Collection(name="Test Collection")
-        content = Image(
-            path="/test/image.jpg",
-            filename="image.jpg",
-            directory="/test"
-        )
+        content = Image(path="/test/image.jpg", filename="image.jpg", directory="/test")
         tag = Tag(name="Test Tag")
-        
+
         db_session.add_all([collection, content, tag])
         db_session.commit()
-        
+
         # Create relationships
         collection.contents.append(content)
         content.tags.append(tag)
         db_session.commit()
-        
+
         content_id = content.id
-        
+
         # Delete the content item
         db_session.delete(content)
         db_session.commit()
-        
+
         # Verify relationships are cleaned up
         db_session.refresh(collection)
         db_session.refresh(tag)
-        
+
         assert len(collection.contents) == 0
         assert len(tag.content_items) == 0
 
-# ✅ Tests à corriger dans le fichier existant :
 
+# ✅ Tests à corriger dans le fichier existant :

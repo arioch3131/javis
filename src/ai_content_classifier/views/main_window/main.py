@@ -324,7 +324,9 @@ class MainWindow(QMainWindow, ThemeMixin):
             max_width = int(geometry.width() * self._SCREEN_WIDTH_RATIO)
             max_height = int(geometry.height() * self._SCREEN_HEIGHT_RATIO)
             if self.width() > max_width or self.height() > max_height:
-                self.resize(min(self.width(), max_width), min(self.height(), max_height))
+                self.resize(
+                    min(self.width(), max_width), min(self.height(), max_height)
+                )
         except Exception as e:
             self.logger.debug(f"Could not fit main window to screen: {e}")
 

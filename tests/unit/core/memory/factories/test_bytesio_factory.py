@@ -1,11 +1,10 @@
-
 import unittest
 from io import BytesIO
 
 from ai_content_classifier.core.memory.factories.bytesio_factory import BytesIOFactory
 
-class TestBytesIOFactory(unittest.TestCase):
 
+class TestBytesIOFactory(unittest.TestCase):
     def setUp(self):
         self.factory = BytesIOFactory()
 
@@ -21,14 +20,14 @@ class TestBytesIOFactory(unittest.TestCase):
         """Test creating a BytesIO object with a pre-allocated size."""
         size = 1024
         buffer = self.factory.create(initial_size=size)
-        self.assertEqual(buffer.getvalue(), b'\0' * size)
+        self.assertEqual(buffer.getvalue(), b"\0" * size)
         self.assertEqual(buffer.tell(), 0)
 
     def test_validate(self):
         """Test the validation of a BytesIO object."""
         buffer = self.factory.create()
         self.assertTrue(self.factory.validate(buffer))
-        
+
         buffer.close()
         self.assertFalse(self.factory.validate(buffer))
 
@@ -40,7 +39,7 @@ class TestBytesIOFactory(unittest.TestCase):
 
         self.assertTrue(self.factory.reset(buffer))
         self.assertEqual(buffer.tell(), 0)
-        self.assertEqual(buffer.getvalue(), b'')
+        self.assertEqual(buffer.getvalue(), b"")
 
     def test_get_key(self):
         """Test the key generation logic."""
@@ -61,7 +60,7 @@ class TestBytesIOFactory(unittest.TestCase):
         buffer = self.factory.create()
         buffer.write(b"12345")
         self.assertEqual(self.factory.estimate_size(buffer), 5)
-        
+
         buffer.write(b"67890")
         self.assertEqual(self.factory.estimate_size(buffer), 10)
 
@@ -91,5 +90,6 @@ class TestBytesIOFactory(unittest.TestCase):
         mock_buffer.tell.side_effect = IOError("Tell failed")
         self.assertEqual(self.factory.estimate_size(mock_buffer), 0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main(verbosity=2)
