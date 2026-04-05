@@ -264,6 +264,49 @@ class ContentWriter(LoggableMixin):
             if not external_session:
                 session.close()
 
+    def clear_content_category(
+        self, file_path: str, session: Optional[Session] = None
+    ) -> Optional[ContentItem]:
+        external_session = session is not None
+        session = session or self.database_service.Session()
+
+        try:
+            item = (
+                session.query(ContentItem).filter(ContentItem.path == file_path).first()
+            )
+
+            if item:
+                item.category = None
+                item.classification_confidence = None
+
+                if item.content_metadata is None:
+                    item.content_metadata = {}
+                if isinstance(item.content_metadata, dict):
+                    item.content_metadata.pop("classification", None)
+                    flag_modified(item, "content_metadata")
+
+                item.date_modified = datetime_utcnow()
+
+                if not external_session:
+                    session.commit()
+
+                self.logger.debug(f"Cleared category for {file_path}.")
+                return item
+
+            self.logger.warning(
+                f"Content item not found for path: {file_path}. Cannot clear category."
+            )
+            return None
+
+        except SQLAlchemyError as e:
+            if not external_session:
+                session.rollback()
+            self.logger.error(f"Error clearing category for {file_path}: {e}")
+            raise
+        finally:
+            if not external_session:
+                session.close()
+
     def _validate_content_creation_params(self, path: str, content_type: str) -> None:
         if not path:
             raise ValueError("File path cannot be empty.")

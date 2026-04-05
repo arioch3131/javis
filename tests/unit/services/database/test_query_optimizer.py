@@ -26,13 +26,19 @@ class TestQueryOptimizer:
             "ai_content_classifier.services.database.core.query_optimizer.get_cache_runtime",
             return_value=mock_runtime,
         ):
-            return QueryOptimizer(database_service=mock_db_service, cache_pool=None, metrics=None)
+            return QueryOptimizer(
+                database_service=mock_db_service, cache_pool=None, metrics=None
+            )
 
-    def test_execute_cached_with_external_session_bypasses_cache(self, optimizer, mock_runtime):
+    def test_execute_cached_with_external_session_bypasses_cache(
+        self, optimizer, mock_runtime
+    ):
         external_session = MagicMock()
         query_builder = MagicMock(return_value=["external"])
 
-        result = optimizer.execute_cached(query_builder, cache_key="k", session=external_session)
+        result = optimizer.execute_cached(
+            query_builder, cache_key="k", session=external_session
+        )
 
         assert result == ["external"]
         query_builder.assert_called_once_with(external_session)
@@ -57,7 +63,9 @@ class TestQueryOptimizer:
         assert result == cached_value
         assert metrics.cache_hits == 1
         assert metrics.cache_misses == 0
-        mock_runtime.get.assert_called_once_with("query:fixed-key", default=None, adapter="memory")
+        mock_runtime.get.assert_called_once_with(
+            "query:fixed-key", default=None, adapter="memory"
+        )
         mock_runtime.set.assert_not_called()
 
     def test_execute_cached_cache_miss_sets_cache_and_records_miss(
@@ -70,18 +78,24 @@ class TestQueryOptimizer:
         result = optimizer.execute_cached(query_builder, cache_key="miss-key")
 
         assert result == ["fresh"]
-        mock_runtime.get.assert_called_once_with("query:miss-key", default=None, adapter="memory")
+        mock_runtime.get.assert_called_once_with(
+            "query:miss-key", default=None, adapter="memory"
+        )
         mock_runtime.set.assert_called_once_with(
             "query:miss-key", ["fresh"], ttl=300, adapter="memory"
         )
         mock_db_service.Session.return_value.close.assert_called_once()
 
     def test_execute_cached_generates_key_when_missing(self, optimizer):
-        with patch.object(optimizer, "_generate_cache_key", return_value="generated-key") as gen:
+        with patch.object(
+            optimizer, "_generate_cache_key", return_value="generated-key"
+        ) as gen:
             optimizer.execute_cached(lambda _s: ["x"])
         gen.assert_called_once()
 
-    def test_execute_cached_legacy_pool_exceptions_are_swallowed(self, mock_db_service, mock_runtime):
+    def test_execute_cached_legacy_pool_exceptions_are_swallowed(
+        self, mock_db_service, mock_runtime
+    ):
         cache_pool = MagicMock()
         cache_pool.acquire_context.side_effect = RuntimeError("pool failed")
 
@@ -89,7 +103,9 @@ class TestQueryOptimizer:
             "ai_content_classifier.services.database.core.query_optimizer.get_cache_runtime",
             return_value=mock_runtime,
         ):
-            optimizer = QueryOptimizer(database_service=mock_db_service, cache_pool=cache_pool)
+            optimizer = QueryOptimizer(
+                database_service=mock_db_service, cache_pool=cache_pool
+            )
 
         result = optimizer.execute_cached(lambda _s: [42], cache_key="legacy-error")
 
@@ -135,13 +151,17 @@ class TestQueryOptimizer:
         optimizer._record_cache_hit()
         optimizer._record_cache_miss()
 
-    def test_record_cache_hit_and_miss_when_metric_fields_missing(self, mock_db_service, mock_runtime):
+    def test_record_cache_hit_and_miss_when_metric_fields_missing(
+        self, mock_db_service, mock_runtime
+    ):
         metrics = SimpleNamespace()
         with patch(
             "ai_content_classifier.services.database.core.query_optimizer.get_cache_runtime",
             return_value=mock_runtime,
         ):
-            optimizer = QueryOptimizer(database_service=mock_db_service, metrics=metrics)
+            optimizer = QueryOptimizer(
+                database_service=mock_db_service, metrics=metrics
+            )
 
         optimizer._record_cache_hit()
         optimizer._record_cache_miss()

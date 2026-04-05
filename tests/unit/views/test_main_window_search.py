@@ -37,7 +37,10 @@ def test_refresh_displayed_files_updates_only_active_view():
     window._sort_mode = "Name"
     window._raw_visible_files = [("/tmp/example.png", "/tmp", "Animals", "image")]
     window._search_index = [
-        (window._raw_visible_files[0], window._build_search_haystack(window._raw_visible_files[0]))
+        (
+            window._raw_visible_files[0],
+            window._build_search_haystack(window._raw_visible_files[0]),
+        )
     ]
     window.thumbnail_grid_widget = MagicMock()
     window.file_list_widget = MagicMock()

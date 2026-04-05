@@ -1024,13 +1024,29 @@ class ProgressPanel(ThemedWidget):
         details = {detail.label.lower(): detail.value for detail in state.details}
         if "processed" in details:
             self.processed_label.setText(f"Processed: {details.get('processed', '--')}")
+            self.processed_label.setToolTip("")
         else:
-            self.processed_label.setText(f"Scanned: {details.get('scanned', '--')}")
+            scanned_value = str(details.get("scanned", "--"))
+            scanned_display = self._truncate_path_keep_end(scanned_value, max_length=72)
+            self.processed_label.setText(f"Scanned: {scanned_display}")
+            self.processed_label.setToolTip(
+                scanned_value if scanned_value != "--" else ""
+            )
         self.rate_label.setText(f"Rate: {details.get('rate', '--')}")
         self.elapsed_label.setText(f"Elapsed: {details.get('elapsed', '--:--')}")
         self.remaining_label.setText(f"Remaining: {details.get('remaining', '--:--')}")
         if "directory" in details:
             self.current_item_label.setToolTip(details["directory"])
+        else:
+            self.current_item_label.setToolTip("")
+
+    @staticmethod
+    def _truncate_path_keep_end(path: str, max_length: int = 72) -> str:
+        if not path or len(path) <= max_length:
+            return path
+        if max_length <= 3:
+            return "..."
+        return f"...{path[-(max_length - 3) :]}"
 
     def _apply_operation_log(self, state: OperationViewState):
         if self.show_log and hasattr(self, "log_text"):

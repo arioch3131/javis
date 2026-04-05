@@ -1,9 +1,13 @@
 import unittest
 
-from ai_content_classifier.core.memory.config import MemoryConfig, MemoryPreset, MemoryConfigFactory
+from ai_content_classifier.core.memory.config import (
+    MemoryConfig,
+    MemoryPreset,
+    MemoryConfigFactory,
+)
+
 
 class TestMemoryConfig(unittest.TestCase):
-
     def test_default_values(self):
         """Test that MemoryConfig has sane default values."""
         config = MemoryConfig()
@@ -27,11 +31,11 @@ class TestMemoryConfig(unittest.TestCase):
         with self.assertRaises(ValueError):
             MemoryConfig(memory_pressure="invalid_pressure")
 
-class TestMemoryConfigFactory(unittest.TestCase):
 
+class TestMemoryConfigFactory(unittest.TestCase):
     def test_create_all_presets(self):
         """Test that the factory can create a config for every defined preset."""
-        default_config = MemoryConfig() # Get default config once
+        default_config = MemoryConfig()  # Get default config once
         for preset in MemoryPreset:
             with self.subTest(preset=preset.name):
                 config = MemoryConfigFactory.create_preset(preset)
@@ -70,5 +74,6 @@ class TestMemoryConfigFactory(unittest.TestCase):
         self.assertLessEqual(config.ttl_seconds, 60)
         self.assertEqual(config.corrupted_object_threshold, 1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main(verbosity=2)

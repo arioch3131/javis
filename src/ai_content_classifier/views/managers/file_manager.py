@@ -281,6 +281,7 @@ class FileManager(QObject):
                 "files_found": 0,
                 "files_processed": 0,
                 "total_files_scanned": 0,
+                "scan_root_directory": directory,
                 "current_directory": directory,
                 "current_file": "",
                 "scan_speed": 0.0,
@@ -1049,6 +1050,17 @@ class FileManager(QObject):
         """
         return self.file_service.refresh_file_list()
 
+    def refresh_and_emit_visible_files(self) -> List[Tuple[str, str]]:
+        """
+        Refreshes files from the database and emits the visible dataset to the UI.
+        Active filters are preserved.
+        """
+        refreshed_files = self.file_service.refresh_file_list()
+        if self._has_active_filters():
+            return self._apply_cumulative_filters()
+        self.files_updated.emit(refreshed_files)
+        return refreshed_files
+
     def get_thumbnail_path(self, file_path: str) -> Optional[str]:
         """
         Retrieves the thumbnail path for a file.
@@ -1154,6 +1166,7 @@ class FileManager(QObject):
             "files_found": 0,
             "files_processed": 0,
             "total_files_scanned": 0,
+            "scan_root_directory": current_directory or "",
             "current_directory": current_directory or "",
             "current_file": "",
             "scan_speed": 0.0,
@@ -1162,6 +1175,8 @@ class FileManager(QObject):
         }
         current_stats.update(self.__dict__.get("_scan_operation_snapshot", {}))
         if current_directory:
+            if not current_stats.get("scan_root_directory"):
+                current_stats["scan_root_directory"] = current_directory
             current_stats["current_directory"] = current_directory
 
         if progress is not None:
@@ -1201,6 +1216,27 @@ class FileManager(QObject):
         errors = max(0, int(current_stats["errors"]))
         successful = max(0, files_processed - errors)
         speed = float(current_stats["scan_speed"])
+        scan_root_directory = str(
+            current_stats.get("scan_root_directory")
+            or current_stats.get("current_directory")
+            or ""
+        ).strip()
+        current_scanned_directory = str(
+            current_stats.get("current_directory") or ""
+        ).strip()
+        title_directory = scan_root_directory
+        if scan_root_directory and current_scanned_directory:
+            try:
+                relative_path = os.path.relpath(
+                    current_scanned_directory, scan_root_directory
+                )
+                if relative_path not in ("", ".") and not relative_path.startswith(
+                    ".."
+                ):
+                    first_segment = relative_path.split(os.sep)[0]
+                    title_directory = os.path.join(scan_root_directory, first_segment)
+            except ValueError:
+                title_directory = scan_root_directory
 
         if operation_state == "completed":
             title = "Scan completed"
@@ -1213,14 +1249,14 @@ class FileManager(QObject):
             primary_action = None
             secondary_action = "close"
         else:
-            title = "Scanning..."
+            title = f"Scanning: {title_directory}" if title_directory else "Scanning..."
             summary = f"{total_scanned} files scanned"
             primary_action = "cancel"
             secondary_action = None
 
         details = [
-            OperationDetail("Scanned", str(total_scanned)),
-            OperationDetail("Directory", current_stats["current_directory"] or "--"),
+            OperationDetail("Scanned", current_scanned_directory or "--"),
+            OperationDetail("Directory", scan_root_directory or "--"),
             OperationDetail(
                 "Rate",
                 self._format_rate(speed, "items") if speed > 0 else "0.0 items/s",
@@ -1237,13 +1273,18 @@ class FileManager(QObject):
             ),
         ]
 
+        if scan_root_directory:
+            current_item_text = f"Root directory: {scan_root_directory}"
+        else:
+            current_item_text = "Waiting for first directory..."
+
         state_payload = OperationViewState(
             operation_id="scan",
             kind="scan",
             title=title,
             state=operation_state,  # type: ignore[arg-type]
             summary=summary,
-            current_item=current_stats["current_file"] or "Waiting for first file...",
+            current_item=current_item_text,
             progress_current=files_processed,
             progress_total=estimated_total,
             is_determinate=estimated_total > 0,
