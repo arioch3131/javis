@@ -13,7 +13,7 @@ dependencies = [
     "PyQt6==6.10.2",
     "requests==2.33.1",
     "chardet<8",
-    "SQLAlchemy==2.0.48",
+    "SQLAlchemy==2.0.49",
     "alembic==1.17.1",
     "numpy==2.4.4",
     "pillow==12.1.1",
