@@ -100,7 +100,9 @@ def test_progress_helpers_and_cancel():
     )
     controller.scan_service = MagicMock()
 
-    progress = SimpleNamespace(files_processed=20, files_found=8, estimated_total_files=0)
+    progress = SimpleNamespace(
+        files_processed=20, files_found=8, estimated_total_files=0
+    )
     updated = []
     controller.progress_updated.connect(lambda payload: updated.append(payload))
 

@@ -17,8 +17,18 @@ class TestFilterSidebar:
 
         widget.set_filters(
             [
-                {"id": "category:space", "label": "Space", "type": "category", "selected": True},
-                {"id": "ext:png", "label": ".png", "type": "extension", "selected": False},
+                {
+                    "id": "category:space",
+                    "label": "Space",
+                    "type": "category",
+                    "selected": True,
+                },
+                {
+                    "id": "ext:png",
+                    "label": ".png",
+                    "type": "extension",
+                    "selected": False,
+                },
             ]
         )
 
@@ -41,8 +51,18 @@ class TestFilterSidebar:
 
         widget.set_filters(
             [
-                {"id": "category_space", "label": "Space", "type": "category", "selected": True},
-                {"id": "extension_.png", "label": ".png", "type": "extension", "selected": True},
+                {
+                    "id": "category_space",
+                    "label": "Space",
+                    "type": "category",
+                    "selected": True,
+                },
+                {
+                    "id": "extension_.png",
+                    "label": ".png",
+                    "type": "extension",
+                    "selected": True,
+                },
             ]
         )
 

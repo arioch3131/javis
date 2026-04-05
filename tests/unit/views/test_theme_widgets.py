@@ -17,9 +17,16 @@ class TestThemeWidgets:
     def test_theme_selector_uses_themed_scroll_area_and_buttons(self):
         widget = ThemeSelector()
 
-        assert widget.findChild(type(widget.import_btn), "themeImportButton") is not None
-        assert widget.findChild(type(widget.export_btn), "themeExportButton") is not None
-        assert widget.findChild(type(widget.settings_btn), "themeSettingsButton") is not None
+        assert (
+            widget.findChild(type(widget.import_btn), "themeImportButton") is not None
+        )
+        assert (
+            widget.findChild(type(widget.export_btn), "themeExportButton") is not None
+        )
+        assert (
+            widget.findChild(type(widget.settings_btn), "themeSettingsButton")
+            is not None
+        )
         assert widget.findChild(QScrollArea, "themeSelectorScrollArea") is not None
 
     def test_theme_preview_has_expected_size_and_styles(self):

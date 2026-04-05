@@ -37,6 +37,7 @@ class FileDetailsDialog(QDialog):
 
     previous_requested = pyqtSignal()
     next_requested = pyqtSignal()
+    clear_category_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -79,6 +80,16 @@ class FileDetailsDialog(QDialog):
 
         layout.addLayout(content_row, 1)
 
+        footer_row = QHBoxLayout()
+        footer_row.setContentsMargins(0, 0, 0, 0)
+        footer_row.addStretch(1)
+        self.clear_category_button = QPushButton("Clear Category", self)
+        self.clear_category_button.setObjectName("detailsClearCategoryButton")
+        self.clear_category_button.setEnabled(False)
+        self.clear_category_button.clicked.connect(self._emit_clear_category_requested)
+        footer_row.addWidget(self.clear_category_button)
+        layout.addLayout(footer_row)
+
         self.previous_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Left), self)
         self.previous_shortcut.activated.connect(self._trigger_previous)
         self.next_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
@@ -93,6 +104,12 @@ class FileDetailsDialog(QDialog):
             else "File details"
         )
         self.preview_widget.set_file_details(file_details)
+        classification = file_details.get("classification", {}) or {}
+        category = classification.get("category")
+        can_clear = bool(category) and str(category).strip().lower() not in {
+            "uncategorized",
+        }
+        self.clear_category_button.setEnabled(can_clear and bool(file_path))
 
     def set_navigation_state(self, has_previous: bool, has_next: bool) -> None:
         self.previous_button.setEnabled(has_previous)
@@ -105,3 +122,7 @@ class FileDetailsDialog(QDialog):
     def _trigger_next(self) -> None:
         if self.next_button.isEnabled():
             self.next_requested.emit()
+
+    def _emit_clear_category_requested(self) -> None:
+        if self.current_file_path:
+            self.clear_category_requested.emit(self.current_file_path)

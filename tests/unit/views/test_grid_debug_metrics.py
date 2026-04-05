@@ -2,7 +2,9 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from ai_content_classifier.views.widgets.grid.grid_core import UltraOptimizedThumbnailGrid
+from ai_content_classifier.views.widgets.grid.grid_core import (
+    UltraOptimizedThumbnailGrid,
+)
 
 
 class TestGridDebugMetrics:

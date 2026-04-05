@@ -46,7 +46,7 @@ else:
         Returns the current UTC datetime without timezone information.
         Compatible with Python versions prior to 3.12.
         """
-        return datetime.utcnow
+        return datetime.utcnow()
 
 
 # Association table for many-to-many relationship between ContentItem and Tag.

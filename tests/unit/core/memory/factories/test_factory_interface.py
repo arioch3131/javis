@@ -1,25 +1,39 @@
-
 import unittest
 import sys
 
 from ai_content_classifier.core.memory.factories.factory_interface import ObjectFactory
 
+
 # A concrete implementation for testing purposes
 class ConcreteFactory(ObjectFactory):
-    def create(self, *args, **kwargs): return "created"
-    def reset(self, obj): return True
-    def validate(self, obj): return True
-    def get_key(self, *args, **kwargs): return "key"
+    def create(self, *args, **kwargs):
+        return "created"
+
+    def reset(self, obj):
+        return True
+
+    def validate(self, obj):
+        return True
+
+    def get_key(self, *args, **kwargs):
+        return "key"
+
     # We don't implement destroy or estimate_size to test the defaults
+
 
 class IncompleteFactory(ObjectFactory):
     # Missing the 'create' method
-    def reset(self, obj): return True
-    def validate(self, obj): return True
-    def get_key(self, *args, **kwargs): return "key"
+    def reset(self, obj):
+        return True
+
+    def validate(self, obj):
+        return True
+
+    def get_key(self, *args, **kwargs):
+        return "key"
+
 
 class TestObjectFactoryInterface(unittest.TestCase):
-
     def test_abstract_methods_must_be_implemented(self):
         """Test that instantiating a factory without all abstract methods fails."""
         with self.assertRaises(TypeError):
@@ -46,10 +60,11 @@ class TestObjectFactoryInterface(unittest.TestCase):
         """Test the default estimate_size() method uses sys.getsizeof."""
         factory = ConcreteFactory()
         test_string = "hello world"
-        
+
         # The default implementation should be equivalent to sys.getsizeof
         expected_size = sys.getsizeof(test_string)
         self.assertEqual(factory.estimate_size(test_string), expected_size)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main(verbosity=2)

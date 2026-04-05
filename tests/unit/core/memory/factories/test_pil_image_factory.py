@@ -1,12 +1,13 @@
-
 import unittest
 from unittest.mock import Mock, PropertyMock
 from PIL import Image
 
-from ai_content_classifier.core.memory.factories.pil_image_factory import PILImageFactory
+from ai_content_classifier.core.memory.factories.pil_image_factory import (
+    PILImageFactory,
+)
+
 
 class TestPILImageFactory(unittest.TestCase):
-
     def test_create(self):
         """Test creating a PIL Image object."""
         factory = PILImageFactory()
@@ -30,20 +31,26 @@ class TestPILImageFactory(unittest.TestCase):
 
         # Test validate() exception (forcing exception in width access)
         mock_error_img = Mock()
-        mock_error_img.width = PropertyMock(side_effect=Exception("Width access failed"))
-        mock_error_img.height = 10 # Ensure height is valid
+        mock_error_img.width = PropertyMock(
+            side_effect=Exception("Width access failed")
+        )
+        mock_error_img.height = 10  # Ensure height is valid
         self.assertFalse(factory.validate(mock_error_img))
 
         # Test validate() exception (forcing exception in height access)
         mock_error_img_height = Mock()
         mock_error_img_height.width = 10
-        mock_error_img_height.height = PropertyMock(side_effect=Exception("Height access failed"))
+        mock_error_img_height.height = PropertyMock(
+            side_effect=Exception("Height access failed")
+        )
         self.assertFalse(factory.validate(mock_error_img_height))
 
         # Test validate() exception (forcing exception in height access)
         mock_error_img_height = Mock()
         mock_error_img_height.width = 10
-        mock_error_img_height.height = PropertyMock(side_effect=Exception("Height access failed"))
+        mock_error_img_height.height = PropertyMock(
+            side_effect=Exception("Height access failed")
+        )
         self.assertFalse(factory.validate(mock_error_img_height))
 
         invalid_img = Image.new("RGB", (0, 0))
@@ -53,7 +60,7 @@ class TestPILImageFactory(unittest.TestCase):
         """Test that an RGB image is correctly reset to black."""
         factory = PILImageFactory(enable_reset=True)
         img = factory.create(width=10, height=10, mode="RGB")
-        img.paste((255, 0, 0), [0, 0, 10, 10]) # Fill with red
+        img.paste((255, 0, 0), [0, 0, 10, 10])  # Fill with red
         self.assertEqual(img.getpixel((5, 5)), (255, 0, 0))
 
         self.assertTrue(factory.reset(img))
@@ -63,7 +70,7 @@ class TestPILImageFactory(unittest.TestCase):
         """Test that an RGBA image is correctly reset to transparent black."""
         factory = PILImageFactory(enable_reset=True)
         img = factory.create(width=10, height=10, mode="RGBA")
-        img.paste((255, 0, 0, 255), [0, 0, 10, 10]) # Fill with opaque red
+        img.paste((255, 0, 0, 255), [0, 0, 10, 10])  # Fill with opaque red
         self.assertEqual(img.getpixel((5, 5)), (255, 0, 0, 255))
 
         self.assertTrue(factory.reset(img))
@@ -73,7 +80,7 @@ class TestPILImageFactory(unittest.TestCase):
         """Test that an L mode image is correctly reset to black (0)."""
         factory = PILImageFactory(enable_reset=True)
         img = factory.create(width=10, height=10, mode="L")
-        img.paste(255, [0, 0, 10, 10]) # Fill with white
+        img.paste(255, [0, 0, 10, 10])  # Fill with white
         self.assertEqual(img.getpixel((5, 5)), 255)
 
         self.assertTrue(factory.reset(img))
@@ -121,7 +128,7 @@ class TestPILImageFactory(unittest.TestCase):
         img_l = factory.create(w, h, "L")
         self.assertEqual(factory.estimate_size(img_l), w * h * 1)
 
-        img_f = factory.create(w, h, "F") # 32-bit float
+        img_f = factory.create(w, h, "F")  # 32-bit float
         self.assertEqual(factory.estimate_size(img_f), w * h * 4)
 
     def test_exception_branches(self):
@@ -130,13 +137,15 @@ class TestPILImageFactory(unittest.TestCase):
         mock_image = unittest.mock.Mock()
 
         # Test reset() exception
-        mock_image.mode = "RGB" # Set a mode to enter the try block
+        mock_image.mode = "RGB"  # Set a mode to enter the try block
         mock_image.paste.side_effect = ValueError("Paste failed")
         self.assertFalse(factory.reset(mock_image))
 
         # Test validate() exception
         mock_image.reset_mock()
-        type(mock_image).width = unittest.mock.PropertyMock(side_effect=AttributeError("Width failed"))
+        type(mock_image).width = unittest.mock.PropertyMock(
+            side_effect=AttributeError("Width failed")
+        )
         self.assertFalse(factory.validate(mock_image))
 
         # Test destroy() exception
@@ -157,5 +166,6 @@ class TestPILImageFactory(unittest.TestCase):
         # Should fall back to the default value of 4 bytes per pixel
         self.assertEqual(factory.estimate_size(mock_image), 10 * 10 * 4)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main(verbosity=2)

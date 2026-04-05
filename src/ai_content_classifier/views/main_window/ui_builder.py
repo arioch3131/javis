@@ -611,7 +611,9 @@ class UIBuilder(LoggableMixin):
             "Start with Scan Folder to browse your content library.",
             "Scan Folder",
         )
-        self.apply_responsive_layout(self.main_window.width(), self.main_window.height())
+        self.apply_responsive_layout(
+            self.main_window.width(), self.main_window.height()
+        )
 
     def _connect_ui_signals(self):
         if hasattr(self.main_window, "view_mode_button_group"):

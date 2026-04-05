@@ -432,9 +432,9 @@ class FilePresenter(QObject):
         """Return a short, stable hash for thumbnail file naming."""
         import hashlib
 
-        return hashlib.md5(file_path.encode("utf-8"), usedforsecurity=False).hexdigest()[
-            :12
-        ]
+        return hashlib.md5(
+            file_path.encode("utf-8"), usedforsecurity=False
+        ).hexdigest()[:12]
 
     @staticmethod
     def _resolve_thumbnail_cache_dir() -> str:
@@ -543,6 +543,9 @@ class FilePresenter(QObject):
                 self._details_dialog.next_requested.connect(
                     self._show_next_file_details
                 )
+                self._details_dialog.clear_category_requested.connect(
+                    self._on_clear_category_requested
+                )
             self._details_dialog_path = file_path
             self._details_dialog.set_file_details(file_details)
             self._update_details_dialog_navigation()
@@ -552,6 +555,39 @@ class FilePresenter(QObject):
         except Exception as exc:
             self.logger.error(
                 f"Error opening file details dialog for {file_path}: {exc}",
+                exc_info=True,
+            )
+
+    def _on_clear_category_requested(self, file_path: str) -> None:
+        """Clears category for a single file from the details dialog."""
+        normalized_path = str(file_path or "").strip()
+        if not normalized_path:
+            return
+
+        try:
+            updated_item = self.db_service.clear_content_category(normalized_path)
+            if not updated_item:
+                self.logger.warning(
+                    f"Unable to clear category: file not found in DB ({normalized_path})"
+                )
+                return
+
+            if self._details_dialog and self._details_dialog_path == normalized_path:
+                self._details_dialog.set_file_details(
+                    self._build_file_details(normalized_path)
+                )
+
+            file_manager = getattr(self.main_window, "file_manager", None)
+            if file_manager and hasattr(file_manager, "refresh_and_emit_visible_files"):
+                file_manager.refresh_and_emit_visible_files()
+            else:
+                # Fallback for tests/legacy hosts without FileManager wiring.
+                self.refresh_file_list()
+
+            self.logger.info(f"Category cleared for file: {normalized_path}")
+        except Exception as exc:
+            self.logger.error(
+                f"Error clearing category for file {normalized_path}: {exc}",
                 exc_info=True,
             )
 

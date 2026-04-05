@@ -1,5 +1,9 @@
+from ai_content_classifier.models.config_models import (
+    ConfigKey,
+    ConfigDefinition,
+    CONFIG_DEFINITIONS,
+)
 
-from ai_content_classifier.models.config_models import ConfigKey, ConfigDefinition, CONFIG_DEFINITIONS
 
 class TestConfigModels:
     def test_config_key_enum(self):
@@ -17,7 +21,7 @@ class TestConfigModels:
             default="http://localhost:11434",
             category="API",
             label="API URL",
-            description="Base URL for the Ollama LLM service."
+            description="Base URL for the Ollama LLM service.",
         )
         assert definition.key == ConfigKey.API_URL
         assert definition.type == str
@@ -31,7 +35,9 @@ class TestConfigModels:
     def test_config_definitions_completeness(self):
         # Check if all ConfigKey enums have a corresponding definition
         for key in ConfigKey:
-            assert key in CONFIG_DEFINITIONS, f"Missing definition for ConfigKey: {key.name}"
+            assert key in CONFIG_DEFINITIONS, (
+                f"Missing definition for ConfigKey: {key.name}"
+            )
 
     def test_config_definitions_content(self):
         # Spot check a few definitions for correctness
@@ -62,8 +68,7 @@ class TestConfigModels:
             label="Log Level",
             description="Application logging level.",
             options=["DEBUG", "INFO", "WARNING"],
-            validation_rules=[mock_validation]
+            validation_rules=[mock_validation],
         )
         assert definition.options == ["DEBUG", "INFO", "WARNING"]
         assert definition.validation_rules == [mock_validation]
-

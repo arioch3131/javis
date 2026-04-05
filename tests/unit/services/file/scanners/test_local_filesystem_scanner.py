@@ -25,12 +25,12 @@ class TestLocalFilesystemScanner:
             ("/test_dir/subdir1", [], ["file3.pdf"]),
             ("/test_dir/subdir2", [], ["file4.mp3", "file5.png"]),
         ]
-        with patch('os.walk', return_value=mock_data) as mock_walk:
+        with patch("os.walk", return_value=mock_data) as mock_walk:
             yield mock_walk
 
     @pytest.fixture
     def mock_os_access(self):
-        with patch('os.access', return_value=True) as mock_access:
+        with patch("os.access", return_value=True) as mock_access:
             yield mock_access
 
     @pytest.fixture
@@ -48,10 +48,13 @@ class TestLocalFilesystemScanner:
             elif path.endswith(".png"):
                 return "file5", ".png"
             return "", ""
-        with patch('os.path.splitext', side_effect=side_effect) as mock_splitext:
+
+        with patch("os.path.splitext", side_effect=side_effect) as mock_splitext:
             yield mock_splitext
 
-    def test_scan_directory_basic(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_basic(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         files = list(scanner.scan_directory("/test_dir"))
         expected_files = [
             ("/test_dir/file1.txt", "/test_dir"),
@@ -64,9 +67,13 @@ class TestLocalFilesystemScanner:
         mock_os_walk.assert_called_once_with("/test_dir")
         assert mock_os_access.call_count == len(expected_files)
 
-    def test_scan_directory_with_allowed_extensions(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_with_allowed_extensions(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         allowed_extensions = {".jpg", ".png"}
-        files = list(scanner.scan_directory("/test_dir", allowed_extensions=allowed_extensions))
+        files = list(
+            scanner.scan_directory("/test_dir", allowed_extensions=allowed_extensions)
+        )
         expected_files = [
             ("/test_dir/file2.jpg", "/test_dir"),
             ("/test_dir/subdir2/file5.png", "/test_dir/subdir2"),
@@ -74,23 +81,33 @@ class TestLocalFilesystemScanner:
         assert sorted(files) == sorted(expected_files)
         assert mock_os_access.call_count == len(expected_files)
 
-    def test_scan_directory_cancellation(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_cancellation(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         # Simulate cancellation after the first file
         def mock_walk_cancellable(directory):
             yield ("/test_dir", [], ["file1.txt", "file2.jpg"])
-            scanner.cancel_scan() # Cancel during the first iteration
+            scanner.cancel_scan()  # Cancel during the first iteration
             yield ("/test_dir/subdir1", [], ["file3.pdf"])
 
         mock_os_walk.side_effect = mock_walk_cancellable
 
         files = list(scanner.scan_directory("/test_dir"))
-        assert len(files) == 2 # The cancellation stops the next iteration of os.walk, not the current one.
+        assert (
+            len(files) == 2
+        )  # The cancellation stops the next iteration of os.walk, not the current one.
         assert files[0] == ("/test_dir/file1.txt", "/test_dir")
         assert scanner.is_cancelled()
 
-    def test_scan_directory_progress_callback(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_progress_callback(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         mock_callback = MagicMock()
-        files = list(scanner.scan_directory("/test_dir", progress_callback=mock_callback, batch_size=2))
+        files = list(
+            scanner.scan_directory(
+                "/test_dir", progress_callback=mock_callback, batch_size=2
+            )
+        )
 
         # Expect callback to be called at least twice (after 2 files, and final update)
         assert mock_callback.call_count >= 2
@@ -100,35 +117,47 @@ class TestLocalFilesystemScanner:
         assert last_progress.files_found == len(files)
         assert last_progress.files_processed == len(files)
 
-    def test_scan_directory_os_error_handling(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_os_error_handling(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         mock_os_access.side_effect = PermissionError("Permission denied")
         files = list(scanner.scan_directory("/test_dir"))
-        assert len(files) == 0 # No files should be yielded due to error
+        assert len(files) == 0  # No files should be yielded due to error
         # Check that logger.warning was called
-        scanner.logger.warning.assert_called() # Check that a warning was logged
+        scanner.logger.warning.assert_called()  # Check that a warning was logged
 
     def test_cancel_scan_and_is_cancelled(self, scanner):
         assert not scanner.is_cancelled()
         scanner.cancel_scan()
         assert scanner.is_cancelled()
 
-    def test_scan_directory_empty(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_empty(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         mock_os_walk.return_value = [("/empty_dir", [], [])]
         files = list(scanner.scan_directory("/empty_dir"))
         assert len(files) == 0
 
-    def test_scan_directory_no_matching_extensions(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_no_matching_extensions(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         allowed_extensions = {".xyz"}
-        files = list(scanner.scan_directory("/test_dir", allowed_extensions=allowed_extensions))
+        files = list(
+            scanner.scan_directory("/test_dir", allowed_extensions=allowed_extensions)
+        )
         assert len(files) == 0
 
-    def test_scan_directory_exception_handling(self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext):
+    def test_scan_directory_exception_handling(
+        self, scanner, mock_os_walk, mock_os_access, mock_os_path_splitext
+    ):
         mock_os_walk.side_effect = Exception("Unexpected walk error")
         with pytest.raises(Exception, match="Unexpected walk error"):
             list(scanner.scan_directory("/test_dir"))
-        scanner.logger.error.assert_called() # Verify error was logged
+        scanner.logger.error.assert_called()  # Verify error was logged
 
-    def test_scan_directory_excludes_central_thumbnail_cache(self, tmp_path, monkeypatch):
+    def test_scan_directory_excludes_central_thumbnail_cache(
+        self, tmp_path, monkeypatch
+    ):
         scan_root = tmp_path / "scan-root"
         scan_root.mkdir()
 

@@ -57,3 +57,33 @@ class TestProgressPanelOperationState:
         panel.set_show_progress_bar(False)
 
         assert panel.progress_container.isHidden()
+
+    def test_scanned_path_in_details_is_truncated_with_ellipsis_prefix(self):
+        panel = ProgressPanel(show_details=True, show_log=False)
+        long_path = (
+            "/very/long/root/path/with/many/segments/that/keeps/growing/"
+            "and/finally/the/leaf/folder"
+        )
+        state = OperationViewState(
+            operation_id="scan",
+            kind="scan",
+            title="Scanning...",
+            state="running",
+            summary="42 files scanned",
+            current_item="Root directory: /very/long/root/path",
+            details=[
+                OperationDetail("Scanned", long_path),
+                OperationDetail("Directory", "/very/long/root/path"),
+                OperationDetail("Rate", "2.1 items/s"),
+                OperationDetail("Elapsed", "00:12"),
+                OperationDetail("Remaining", "00:21"),
+            ],
+        )
+
+        panel.apply_operation_state(state)
+        panel.set_details_expanded(True)
+
+        scanned_text = panel.processed_label.text()
+        assert scanned_text.startswith("Scanned: ...")
+        assert scanned_text.endswith("the/leaf/folder")
+        assert panel.processed_label.toolTip() == long_path
