@@ -313,6 +313,7 @@ class ContentReader(LoggableMixin):
             ContentItem.metadata_extracted,
             ContentItem.date_created,
             ContentItem.date_modified,
+            ContentItem.date_indexed,
             ContentItem.file_size,
             ContentItem.file_hash,
             ContentItem.category,
@@ -320,6 +321,7 @@ class ContentReader(LoggableMixin):
             ContentItem.height,
             ContentItem.format,
             ContentItem.duration,
+            ContentItem.year_taken,
         )
 
     def _apply_sorting(self, query: Query, sort_by: str, sort_desc: bool) -> Query:

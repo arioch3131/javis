@@ -1,9 +1,9 @@
 # views/widgets/common/category_editor.py
 """
-CategoryEditor - Éditeur de categories reusable.
+CategoryEditor - Reusable category editor.
 
-Widget permettant d'ajouter, supprimer et modifier des categories
-avec validation et interface intuitive.
+Widget for adding, removing, and editing categories
+with validation and an intuitive interface.
 """
 
 from typing import Callable, List, Optional, Set
@@ -30,19 +30,19 @@ from ai_content_classifier.views.widgets.base.themed_widget import ThemedWidget
 
 class CategoryEditor(ThemedWidget):
     """
-    Éditeur de categories avec interface intuitive.
+    Category editor with an intuitive interface.
 
     Features:
-    - Ajout/suppression de categories
-    - Modification inline
-    - Validation des noms
-    - Categories predefined
-    - Menu contextuel
+    - Add/remove categories
+    - Inline editing
+    - Name validation
+    - Predefined categories
+    - Context menu
     - Drag-and-drop support for reordering
     """
 
-    # Signaux
-    categories_changed = pyqtSignal(list)  # Liste des categories update
+    # Signals
+    categories_changed = pyqtSignal(list)  # Updated category list
     category_added = pyqtSignal(str)  # Added category
     category_removed = pyqtSignal(str)  # Removed category
     category_renamed = pyqtSignal(str, str)  # (old_name, new_name)
@@ -71,7 +71,7 @@ class CategoryEditor(ThemedWidget):
         """Configure editor UI."""
         layout = self.get_main_layout()
 
-        # Header avec titre
+        # Header with title
         self.header_container = QFrame()
         self.header_container.setObjectName("categoryHeader")
 
@@ -79,12 +79,12 @@ class CategoryEditor(ThemedWidget):
         header_layout.setContentsMargins(8, 8, 8, 8)
         header_layout.setSpacing(4)
 
-        # Titre
+        # Title
         self.title_label = QLabel(f"📂 {self.title}")
         self.title_label.setFont(self.create_bold_font(2))
         header_layout.addWidget(self.title_label)
 
-        # Sous-titre informatif
+        # Informational subtitle
         self.info_label = QLabel(
             "Add, remove or modify categories for content classification"
         )
@@ -93,7 +93,7 @@ class CategoryEditor(ThemedWidget):
 
         layout.addWidget(self.header_container)
 
-        # Zone d'ajout
+        # Add section
         self.add_container = QFrame()
         self.add_container.setObjectName("addContainer")
 
@@ -108,13 +108,13 @@ class CategoryEditor(ThemedWidget):
         self.new_category_input.returnPressed.connect(self._add_category)
         self.new_category_input.textChanged.connect(self._validate_input)
 
-        # Bouton ajouter
+        # Add button
         self.add_button = QPushButton("➕ Add")
         self.add_button.setObjectName("addButton")
         self.add_button.clicked.connect(self._add_category)
         self.add_button.setEnabled(False)
 
-        # Bouton suggestions
+        # Suggestions button
         self.suggestions_button = QPushButton("💡 Suggestions")
         self.suggestions_button.setObjectName("suggestionsButton")
         self.suggestions_button.clicked.connect(self._show_suggestions)
@@ -125,7 +125,7 @@ class CategoryEditor(ThemedWidget):
 
         layout.addWidget(self.add_container)
 
-        # Liste des categories
+        # Category list
         self.categories_list = QListWidget()
         self.categories_list.setObjectName("categoriesList")
         self.categories_list.setAlternatingRowColors(True)
@@ -137,7 +137,7 @@ class CategoryEditor(ThemedWidget):
 
         layout.addWidget(self.categories_list, 1)
 
-        # Barre d'actions
+        # Action bar
         self.actions_container = QFrame()
         self.actions_container.setObjectName("actionsContainer")
 
@@ -145,14 +145,14 @@ class CategoryEditor(ThemedWidget):
         actions_layout.setContentsMargins(8, 4, 8, 4)
         actions_layout.setSpacing(8)
 
-        # Compteur
+        # Counter
         self.count_label = QLabel("0 categories")
         self.count_label.setObjectName("countLabel")
         actions_layout.addWidget(self.count_label)
 
         actions_layout.addStretch()
 
-        # Boutons d'action
+        # Action buttons
         self.clear_button = QPushButton("🗑️ Clear All")
         self.clear_button.setObjectName("clearButton")
         self.clear_button.clicked.connect(self._clear_all)
@@ -167,7 +167,7 @@ class CategoryEditor(ThemedWidget):
 
         layout.addWidget(self.actions_container)
 
-        # Message d'error
+        # Error message
         self.error_label = QLabel()
         self.error_label.setObjectName("errorLabel")
         self.error_label.setWordWrap(True)
@@ -180,14 +180,14 @@ class CategoryEditor(ThemedWidget):
             self._add_category_internal(category)
 
     def _validate_input(self, text: str):
-        """Valide le texte saisi."""
+        """Validate input text."""
         text = text.strip()
 
         # Enable/disable button based on validity
         is_valid = self._is_valid_category_name(text)
         self.add_button.setEnabled(is_valid)
 
-        # Changer la couleur de l'input
+        # Update input error state
         if text and not is_valid:
             self._show_input_error("Invalid category name")
         else:
@@ -254,13 +254,13 @@ class CategoryEditor(ThemedWidget):
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
         self.categories_list.addItem(item)
 
-        # Trier la liste
+        # Sort list
         self.categories_list.sortItems()
 
         # Update interface
         self._update_ui_state()
 
-        # Émettre les signaux
+        # Emit signals
         self.category_added.emit(name)
         self.categories_changed.emit(list(self.categories))
 
@@ -276,10 +276,10 @@ class CategoryEditor(ThemedWidget):
             self._show_error("At least one category is required")
             return
 
-        # Supprimer de la liste
+        # Remove from set
         self.categories.remove(name)
 
-        # Supprimer de l'interface
+        # Remove from UI
         for i in range(self.categories_list.count()):
             item = self.categories_list.item(i)
             if item.data(Qt.ItemDataRole.UserRole) == name:
@@ -289,7 +289,7 @@ class CategoryEditor(ThemedWidget):
         # Update interface
         self._update_ui_state()
 
-        # Émettre les signaux
+        # Emit signals
         self.category_removed.emit(name)
         self.categories_changed.emit(list(self.categories))
 
@@ -316,10 +316,10 @@ class CategoryEditor(ThemedWidget):
                     item.setText(f"📁 {new_name}")
                     item.setData(Qt.ItemDataRole.UserRole, new_name)
 
-                    # Trier
+                    # Sort
                     self.categories_list.sortItems()
 
-                    # Signaux
+                    # Signals
                     self.category_renamed.emit(old_name, new_name)
                     self.categories_changed.emit(list(self.categories))
 
@@ -328,7 +328,7 @@ class CategoryEditor(ThemedWidget):
                     self._show_error("Invalid category name")
 
     def _show_context_menu(self, position: QPoint):
-        """Affiche le menu contextuel."""
+        """Show context menu."""
         item = self.categories_list.itemAt(position)
         if not item:
             return
@@ -354,12 +354,12 @@ class CategoryEditor(ThemedWidget):
         remove_action.triggered.connect(lambda: self._remove_category(category_name))
         menu.addAction(remove_action)
 
-        # Afficher le menu
+        # Show menu
         menu.exec(self.categories_list.mapToGlobal(position))
 
     def _duplicate_category(self, name: str):
         """Duplicate a category."""
-        # Trouver un nom unique
+        # Find a unique name
         base_name = name
         counter = 1
         new_name = f"{base_name} Copy"
@@ -379,7 +379,7 @@ class CategoryEditor(ThemedWidget):
             self._show_error("No more suggestions available")
             return
 
-        # Menu avec suggestions
+        # Suggestions menu
         menu = QMenu("Category Suggestions", self)
 
         for suggestion in sorted(available_suggestions):
@@ -389,12 +389,12 @@ class CategoryEditor(ThemedWidget):
             )
             menu.addAction(action)
 
-        # Afficher le menu
+        # Show menu
         button_rect = self.suggestions_button.geometry()
         menu.exec(self.suggestions_button.mapToGlobal(button_rect.bottomLeft()))
 
     def _clear_all(self, confirm: bool = True):
-        """Supprime toutes les categories."""
+        """Remove all categories."""
         if confirm and not self.allow_empty:
             reply = QMessageBox.question(
                 self,
@@ -407,10 +407,10 @@ class CategoryEditor(ThemedWidget):
             if reply != QMessageBox.StandardButton.Yes:
                 return
 
-        # Saver pour les signaux
+        # Save previous categories for signals
         old_categories = list(self.categories)
 
-        # Vider
+        # Clear data
         self.categories.clear()
         self.categories_list.clear()
 
@@ -431,18 +431,18 @@ class CategoryEditor(ThemedWidget):
         self.load_predefined_categories()
 
     def _update_ui_state(self):
-        """Update l'state de l'interface."""
+        """Update UI state."""
         count = len(self.categories)
         palette = get_theme_service().get_current_palette()
         typography = get_theme_service().get_theme_definition().typography
 
-        # Compteur
+        # Counter
         self.count_label.setText(f"{count} categor{'ies' if count != 1 else 'y'}")
 
-        # Boutons
+        # Buttons
         self.clear_button.setEnabled(count > 0)
 
-        # Couleur du compteur selon les limites
+        # Counter color based on limits
         if count >= self.max_categories:
             self.count_label.setStyleSheet(
                 f"color: {palette.warning}; font-weight: {typography.font_weight_bold};"
@@ -455,7 +455,7 @@ class CategoryEditor(ThemedWidget):
             self.count_label.setStyleSheet("")
 
     def _show_error(self, message: str):
-        """Affiche un message d'error."""
+        """Show an error message."""
         self.error_label.setText(f"❌ {message}")
         self.error_label.show()
 
@@ -465,12 +465,12 @@ class CategoryEditor(ThemedWidget):
         QTimer.singleShot(3000, self.error_label.hide)
 
     def _show_input_error(self, message: str):
-        """Affiche une error sur l'input."""
+        """Show an input error."""
         self.new_category_input.setToolTip(message)
-        # Changer le style pour indiquer l'error
+        # Style hook can be added here if needed
 
     def _hide_input_error(self):
-        """Cache l'error sur l'input."""
+        """Hide input error."""
         self.new_category_input.setToolTip("")
 
     def apply_default_theme(self, palette: ThemePalette):
@@ -596,17 +596,17 @@ class CategoryEditor(ThemedWidget):
         except Exception as e:
             self.logger.error(f"Error applying category editor theme: {e}")
 
-    # === API PUBLIQUE ===
+    # === PUBLIC API ===
 
     def set_categories(self, categories: List[str]):
-        """Set la liste des categories."""
+        """Set the category list."""
         self.clear_all_categories(confirm=False)
         for category in categories:
             if self._is_valid_category_name(category):
                 self._add_category_internal(category)
 
     def get_categories(self) -> List[str]:
-        """Return la liste des categories."""
+        """Return the category list."""
         return sorted(list(self.categories))
 
     def add_category(self, name: str) -> bool:
@@ -628,15 +628,15 @@ class CategoryEditor(ThemedWidget):
         return name in self.categories
 
     def clear_all_categories(self, confirm: bool = True):
-        """Supprime toutes les categories."""
+        """Remove all categories."""
         self._clear_all(confirm=confirm)
 
     def set_predefined_categories(self, categories: Set[str]):
-        """Set les categories predefined."""
+        """Set predefined categories."""
         self.predefined_categories = categories
 
     def set_max_categories(self, max_count: int):
-        """Set le nombre maximum de categories."""
+        """Set the maximum number of categories."""
         self.max_categories = max_count
         self._update_ui_state()
 
@@ -650,7 +650,7 @@ class CategoryEditor(ThemedWidget):
         self.custom_validator = validator
 
     def get_category_count(self) -> int:
-        """Return le nombre de categories."""
+        """Return the category count."""
         return len(self.categories)
 
     def is_empty(self) -> bool:

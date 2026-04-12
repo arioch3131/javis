@@ -3,7 +3,7 @@
 ProgressPanel - Progress panel reusable.
 
 Widget to display long-running operation progress with
-detailed information et cancel option.
+detailed information and a cancel option.
 """
 
 import time
@@ -32,19 +32,19 @@ class ProgressPanel(ThemedWidget):
     """
     Progress panel with advanced features.
 
-    Features :
-    - Barre de progression avec pourcentage
+    Features:
+    - Progress bar with percentage
     - Detailed information (processed files, errors, etc.)
     - Real-time operation log
-    - Bouton d'annulation
-    - Statistiques de performance
-    - Animations fluides
-    - States visuels distincts
+    - Cancel button
+    - Performance statistics
+    - Smooth animations
+    - Distinct visual states
     """
 
-    # Signaux
+    # Signals
     cancel_requested = pyqtSignal()  # Cancel requested
-    progress_completed = pyqtSignal(dict)  # Progression completed avec stats
+    progress_completed = pyqtSignal(dict)  # Progress completed with stats
     state_changed = pyqtSignal(str)  # State changed
     action_requested = pyqtSignal(str)  # Action requested
 
@@ -62,7 +62,7 @@ class ProgressPanel(ThemedWidget):
         self.show_details = show_details
         self.show_log = show_log
 
-        # State de progression
+        # Progress state
         self.current_progress = 0
         self.max_progress = 100
         self.is_running = False
@@ -71,7 +71,7 @@ class ProgressPanel(ThemedWidget):
         self.start_time = None
         self.end_time = None
 
-        # Statistiques
+        # Statistics
         self.stats = {
             "items_processed": 0,
             "items_total": 0,
@@ -85,7 +85,7 @@ class ProgressPanel(ThemedWidget):
             "processing_rate": 0,  # items per second
         }
 
-        # Log des messages
+        # Message log
         self.log_messages = []
         self.max_log_messages = 1000
         self.details_expanded = False
@@ -97,7 +97,7 @@ class ProgressPanel(ThemedWidget):
         self.reset_progress()
 
     def setup_ui(self):
-        """Configure l'interface du panel."""
+        """Configure panel UI."""
         metrics = get_theme_service().get_theme_definition().metrics
         layout = self.get_main_layout()
         layout.setSpacing(metrics.spacing_sm)
@@ -106,7 +106,7 @@ class ProgressPanel(ThemedWidget):
         self.header_container = self.create_header()
         layout.addWidget(self.header_container)
 
-        # Barre de progression principale
+        # Main progress bar
         self.progress_container = self.create_progress_bar()
         layout.addWidget(self.progress_container)
 
@@ -123,13 +123,13 @@ class ProgressPanel(ThemedWidget):
             self.log_container = self.create_log_section()
             layout.addWidget(self.log_container, 1)
 
-        # Actions (annulation, etc.)
+        # Actions (cancel, etc.)
         self.actions_container = self.create_actions_section()
         layout.addWidget(self.actions_container)
         self.set_details_expanded(False)
 
     def create_header(self) -> QFrame:
-        """Create the header du panel."""
+        """Create panel header."""
         theme = get_theme_service().get_theme_definition()
         metrics = theme.metrics
         typography = theme.typography
@@ -145,7 +145,7 @@ class ProgressPanel(ThemedWidget):
         )
         layout.setSpacing(metrics.spacing_sm)
 
-        # Titre avec state
+        # Title with state
         self.title_label = QLabel(f"⏳ {self.title}")
         self.title_label.setObjectName("progressTitle")
         self.title_label.setFont(self.create_bold_font(2))
@@ -153,7 +153,7 @@ class ProgressPanel(ThemedWidget):
 
         layout.addStretch()
 
-        # Indicateur d'state
+        # State indicator
         self.state_indicator = QLabel("●")
         self.state_indicator.setObjectName("stateIndicator")
         self.state_indicator.setFont(
@@ -164,7 +164,7 @@ class ProgressPanel(ThemedWidget):
         return header
 
     def create_progress_bar(self) -> QFrame:
-        """Create la barre de progression principale."""
+        """Create main progress bar."""
         metrics = get_theme_service().get_theme_definition().metrics
         container = QFrame()
         container.setObjectName("progressContainer")
@@ -178,7 +178,7 @@ class ProgressPanel(ThemedWidget):
         )
         layout.setSpacing(metrics.spacing_xs)
 
-        # Barre de progression
+        # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setObjectName("mainProgressBar")
         self.progress_bar.setMinimum(0)
@@ -187,7 +187,7 @@ class ProgressPanel(ThemedWidget):
         self.progress_bar.setTextVisible(True)
         layout.addWidget(self.progress_bar)
 
-        # Information basic
+        # Basic information
         info_layout = QHBoxLayout()
 
         # Current item
@@ -250,12 +250,12 @@ class ProgressPanel(ThemedWidget):
         )
         layout.setSpacing(metrics.spacing_sm)
 
-        # Titre de section
+        # Section title
         details_title = QLabel("📊 Details")
         details_title.setFont(self.create_bold_font(1))
         layout.addWidget(details_title)
 
-        # Grille de statistiques
+        # Statistics grid
         stats_layout = QHBoxLayout()
 
         # Column 1: Items
@@ -283,7 +283,7 @@ class ProgressPanel(ThemedWidget):
 
         stats_layout.addWidget(items_container, 1)
 
-        # Colonne 2 : Performance
+        # Column 2: Performance
         perf_container = QFrame()
         perf_container.setObjectName("statsContainer")
         perf_layout = QVBoxLayout(perf_container)
@@ -313,7 +313,7 @@ class ProgressPanel(ThemedWidget):
         return container
 
     def create_log_section(self) -> QFrame:
-        """Create la section de log."""
+        """Create log section."""
         theme = get_theme_service().get_theme_definition()
         metrics = theme.metrics
         typography = theme.typography
@@ -338,7 +338,7 @@ class ProgressPanel(ThemedWidget):
 
         header_layout.addStretch()
 
-        # Bouton clear log
+        # Clear log button
         self.clear_log_button = QPushButton("🗑️")
         self.clear_log_button.setObjectName("clearLogButton")
         self.clear_log_button.setFixedSize(
@@ -350,7 +350,7 @@ class ProgressPanel(ThemedWidget):
 
         layout.addLayout(header_layout)
 
-        # Zone de log
+        # Log area
         self.log_text = QTextEdit()
         self.log_text.setObjectName("logText")
         self.log_text.setReadOnly(True)
@@ -363,7 +363,7 @@ class ProgressPanel(ThemedWidget):
         return container
 
     def create_actions_section(self) -> QFrame:
-        """Create la section des actions."""
+        """Create actions section."""
         metrics = get_theme_service().get_theme_definition().metrics
         container = QFrame()
         container.setObjectName("actionsContainer")
@@ -379,7 +379,7 @@ class ProgressPanel(ThemedWidget):
 
         layout.addStretch()
 
-        # Bouton d'annulation
+        # Cancel button
         self.cancel_button = QPushButton("❌ Cancel")
         self.cancel_button.setObjectName("cancelButton")
         self.cancel_button.clicked.connect(self._on_cancel_clicked)
@@ -558,10 +558,10 @@ class ProgressPanel(ThemedWidget):
         except Exception as e:
             self.logger.error(f"Error applying progress panel theme: {e}")
 
-    # === GESTION DE L'ÉTAT ===
+    # === STATE MANAGEMENT ===
 
     def start_progress(self, max_value: int = 100, title: str = None):
-        """Start une new progress."""
+        """Start a new progress run."""
         if title:
             self.title = title
             self.title_label.setText(f"⏳ {title}")
@@ -574,7 +574,7 @@ class ProgressPanel(ThemedWidget):
         self.start_time = time.time()
         self.end_time = None
 
-        # Reset statistiques
+        # Reset statistics
         self.stats = {
             "items_processed": 0,
             "items_total": self.max_progress if not self.is_indeterminate else 0,
@@ -588,7 +588,7 @@ class ProgressPanel(ThemedWidget):
             "processing_rate": 0,
         }
 
-        # Interface
+        # UI
         if self.is_indeterminate:
             # Qt busy mode when total is unknown.
             self.progress_bar.setRange(0, 0)
@@ -599,7 +599,7 @@ class ProgressPanel(ThemedWidget):
             self.progress_bar.setTextVisible(True)
         self.cancel_button.setEnabled(self.is_cancellable)
 
-        # State visuel
+        # Visual state
         self._set_visual_state("running")
 
         # Timer for updates
@@ -619,7 +619,7 @@ class ProgressPanel(ThemedWidget):
         success: bool = True,
         error_message: str = "",
     ):
-        """Update la progression."""
+        """Update progress."""
         if not self.is_running:
             return
 
@@ -635,7 +635,7 @@ class ProgressPanel(ThemedWidget):
             self.current_progress = min(value_int, self.max_progress)
             self.progress_bar.setValue(self.current_progress)
 
-        # Statistiques
+        # Statistics
         self.stats["items_processed"] = value_int
         self.stats["current_item"] = current_item
 
@@ -655,20 +655,20 @@ class ProgressPanel(ThemedWidget):
                         }
                     )
 
-        # Calcul du taux de traitement
+        # Processing rate calculation
         if self.start_time:
             elapsed = time.time() - self.start_time
             if elapsed > 0:
                 self.stats["processing_rate"] = value / elapsed
 
-                # Estimation du temps restant
+                # Remaining time estimate
                 remaining_items = self.max_progress - value_int
                 if self.stats["processing_rate"] > 0 and not self.is_indeterminate:
                     self.stats["estimated_remaining"] = (
                         remaining_items / self.stats["processing_rate"]
                     )
 
-        # Interface update
+        # UI update
         self._update_display()
 
         # Log
@@ -683,7 +683,7 @@ class ProgressPanel(ThemedWidget):
             self.complete_progress()
 
     def complete_progress(self, success: bool = True):
-        """Termine la progression."""
+        """Complete progress."""
         if not self.is_running:
             return
 
@@ -694,11 +694,11 @@ class ProgressPanel(ThemedWidget):
         if hasattr(self, "update_timer"):
             self.update_timer.stop()
 
-        # Calculs finaux
+        # Final calculations
         if self.start_time:
             self.stats["elapsed_time"] = self.end_time - self.start_time
 
-        # State visuel
+        # Visual state
         if success:
             self._set_visual_state("completed")
             self.title_label.setText(f"✅ {self.title} - Completed")
@@ -716,7 +716,7 @@ class ProgressPanel(ThemedWidget):
         self.state_changed.emit("completed" if success else "failed")
 
     def cancel_progress(self):
-        """Cancel la progression."""
+        """Cancel progress."""
         if not self.is_running:
             return
 
@@ -727,7 +727,7 @@ class ProgressPanel(ThemedWidget):
         if hasattr(self, "update_timer"):
             self.update_timer.stop()
 
-        # State visuel
+        # Visual state
         self._set_visual_state("cancelled")
         self.title_label.setText(f"⏹️ {self.title} - Cancelled")
 
@@ -735,13 +735,13 @@ class ProgressPanel(ThemedWidget):
         self.state_changed.emit("cancelled")
 
     def reset_progress(self):
-        """Reset la progression."""
+        """Reset progress."""
         self.is_running = False
         self.current_progress = 0
         self.start_time = None
         self.end_time = None
 
-        # Interface
+        # UI
         self.progress_bar.setValue(0)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setTextVisible(True)
@@ -752,7 +752,7 @@ class ProgressPanel(ThemedWidget):
         self.secondary_button.hide()
         self._current_operation_state = None
 
-        # State visuel
+        # Visual state
         self._set_visual_state("ready")
 
         if hasattr(self, "update_timer"):
@@ -761,52 +761,52 @@ class ProgressPanel(ThemedWidget):
         self.state_changed.emit("ready")
 
     def _set_visual_state(self, state: str):
-        """Set l'state visuel du panel."""
+        """Set panel visual state."""
         state_colors = {
             "ready": "gray",
-            "running": "#4CAF50",  # Vert
-            "completed": "#2196F3",  # Bleu
-            "failed": "#F44336",  # Rouge
+            "running": "#4CAF50",  # Green
+            "completed": "#2196F3",  # Blue
+            "failed": "#F44336",  # Red
             "cancelled": "#FF9800",  # Orange
         }
 
         color = state_colors.get(state, "gray")
         self.state_indicator.setStyleSheet(f"color: {color};")
 
-        # Animation du point pour l'state running
+        # Dot animation for running state
         if state == "running":
             self._start_pulse_animation()
         else:
             self._stop_pulse_animation()
 
     def _start_pulse_animation(self):
-        """Start l'pulsing animation."""
+        """Start pulsing animation."""
         if not hasattr(self, "pulse_animation"):
             self.pulse_animation = QPropertyAnimation(self.state_indicator, b"opacity")
             self.pulse_animation.setDuration(1000)
             self.pulse_animation.setStartValue(1.0)
             self.pulse_animation.setEndValue(0.3)
             self.pulse_animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
-            self.pulse_animation.setLoopCount(-1)  # Infini
+            self.pulse_animation.setLoopCount(-1)  # Infinite
 
         self.pulse_animation.start()
 
     def _stop_pulse_animation(self):
-        """Stop l'pulsing animation."""
+        """Stop pulsing animation."""
         if hasattr(self, "pulse_animation"):
             self.pulse_animation.stop()
 
     def _update_display(self):
-        """Update display des informations."""
+        """Update information display."""
         # Current item
         if self.stats["current_item"]:
-            # Tronquer si trop long
+            # Truncate if too long
             item = self.stats["current_item"]
             if len(item) > 50:
                 item = item[:47] + "..."
             self.current_item_label.setText(item)
 
-        # details (si enabled)
+        # details (if enabled)
         if self.show_details:
             total_text = (
                 str(self.stats["items_total"])
@@ -832,7 +832,7 @@ class ProgressPanel(ThemedWidget):
             )
 
     def _update_time_info(self):
-        """Update les informations de temps."""
+        """Update time information."""
         if not self.start_time:
             return
 
@@ -850,7 +850,7 @@ class ProgressPanel(ThemedWidget):
         else:
             remaining_str = self._format_time(remaining) if remaining > 0 else "--:--"
 
-        # Interface update
+        # UI update
         self.time_label.setText(f"{elapsed_str} / {remaining_str}")
 
         if self.show_details:
@@ -858,7 +858,7 @@ class ProgressPanel(ThemedWidget):
             self.remaining_label.setText(f"Remaining: {remaining_str}")
 
     def _format_time(self, seconds: float) -> str:
-        """Formate un temps en secondes en format MM:SS."""
+        """Format seconds as MM:SS."""
         if seconds < 0:
             return "--:--"
 
@@ -894,7 +894,7 @@ class ProgressPanel(ThemedWidget):
     # === LOG ===
 
     def log_message(self, message: str, level: str = "info"):
-        """Ajoute un message au log."""
+        """Add message to log."""
         timestamp = time.strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}"
 
@@ -903,13 +903,13 @@ class ProgressPanel(ThemedWidget):
             {"timestamp": timestamp, "message": message, "level": level}
         )
 
-        # Limiter le nombre de messages
+        # Limit number of messages
         if len(self.log_messages) > self.max_log_messages:
             self.log_messages.pop(0)
 
-        # Displayr dans l'interface if enabled
+        # Display in UI if enabled
         if self.show_log and hasattr(self, "log_text"):
-            # Couleur selon le niveau
+            # Color by level
             color = {
                 "error": "red",
                 "warning": "orange",
@@ -921,21 +921,21 @@ class ProgressPanel(ThemedWidget):
                 f'<span style="color: {color};">{formatted_message}</span>'
             )
 
-            # Auto-scroll vers le bas
+            # Auto-scroll to bottom
             cursor = self.log_text.textCursor()
             cursor.movePosition(cursor.MoveOperation.End)
             self.log_text.setTextCursor(cursor)
 
     def clear_log(self):
-        """Vide le log."""
+        """Clear log."""
         self.log_messages.clear()
         if hasattr(self, "log_text"):
             self.log_text.clear()
 
-    # === API PUBLIQUE ===
+    # === PUBLIC API ===
 
     def set_cancellable(self, cancellable: bool):
-        """Set si la progression can be canceled."""
+        """Set whether progress can be canceled."""
         self.is_cancellable = cancellable
         if hasattr(self, "cancel_button"):
             self.cancel_button.setVisible(cancellable)
@@ -947,7 +947,7 @@ class ProgressPanel(ThemedWidget):
             self.details_container.setVisible(show and self.details_expanded)
 
     def set_show_log(self, show: bool):
-        """Enable/disable display du log."""
+        """Enable/disable log display."""
         self.show_log = show
         if hasattr(self, "log_container"):
             self.log_container.setVisible(show and self.details_expanded)
@@ -1089,23 +1089,23 @@ class ProgressPanel(ThemedWidget):
         self._set_visual_state(visual_state)
 
     def get_stats(self) -> Dict[str, Any]:
-        """Return les statistiques actuelles."""
+        """Return current statistics."""
         return self.stats.copy()
 
     def get_log_messages(self) -> List[Dict[str, Any]]:
-        """Return les messages de log."""
+        """Return log messages."""
         return self.log_messages.copy()
 
     def is_progress_running(self) -> bool:
-        """Check si une progression est in progress."""
+        """Check whether progress is running."""
         return self.is_running
 
     def is_indeterminate_mode(self) -> bool:
-        """Return True si la progression est en mode indeterminate."""
+        """Return True if progress is in indeterminate mode."""
         return self.is_indeterminate
 
     def set_total_items(self, total_items: int) -> None:
-        """Switch en mode determinate avec un total connu."""
+        """Switch to determinate mode with a known total."""
         total = max(0, int(total_items))
         if total <= 0:
             return
@@ -1119,13 +1119,13 @@ class ProgressPanel(ThemedWidget):
         self._update_display()
 
     def set_outcome_counters(self, successful: int, failed: int) -> None:
-        """allows syncing les counters de succeededte/failure from external source."""
+        """Allow syncing success/failure counters from an external source."""
         self.stats["items_successful"] = max(0, int(successful))
         self.stats["items_failed"] = max(0, int(failed))
         self._update_display()
 
     def get_progress_percentage(self) -> float:
-        """Return le pourcentage de progression."""
+        """Return progress percentage."""
         if self.max_progress == 0:
             return 0
         return (self.current_progress / self.max_progress) * 100

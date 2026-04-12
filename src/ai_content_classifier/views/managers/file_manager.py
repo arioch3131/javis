@@ -1099,6 +1099,12 @@ class FileManager(QObject):
         self.logger.info("Clearing all content from the database...")
         try:
             self.file_service.db_service.clear_all_content()
+            if hasattr(self.file_service, "clear_thumbnail_disk_cache"):
+                self.file_service.clear_thumbnail_disk_cache()
+            if hasattr(self.file_service, "thumbnail_service") and hasattr(
+                self.file_service.thumbnail_service, "clear_cache"
+            ):
+                self.file_service.thumbnail_service.clear_cache()
             if hasattr(self.file_service, "clear_current_files"):
                 self.file_service.clear_current_files()
             self.logger.info("Content database cleared successfully.")

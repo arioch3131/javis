@@ -155,6 +155,69 @@ class TestEnhancedContentReader:
         assert result == "delegated"
         mock_legacy_reader.custom_method.assert_called_once_with("arg1", kw="value")
 
+    def test_get_unique_categories_with_external_session_delegates_to_legacy(
+        self, reader, mock_legacy_reader, mock_query_optimizer
+    ):
+        session = MagicMock()
+        mock_legacy_reader.get_unique_categories.return_value = ["Work", "Personal"]
+
+        result = reader.get_unique_categories(session=session)
+
+        assert result == ["Work", "Personal"]
+        mock_legacy_reader.get_unique_categories.assert_called_once_with(session)
+        mock_query_optimizer.execute_cached.assert_not_called()
+
+    def test_get_unique_categories_without_session_uses_cache(
+        self, reader, mock_legacy_reader, mock_query_optimizer
+    ):
+        fake_session = MagicMock()
+        mock_legacy_reader.get_unique_categories.return_value = ["Work"]
+
+        def _exec(query_builder, cache_key):
+            assert cache_key == "unique_categories"
+            return query_builder(fake_session)
+
+        mock_query_optimizer.execute_cached.side_effect = _exec
+        result = reader.get_unique_categories()
+
+        assert result == ["Work"]
+        mock_query_optimizer.execute_cached.assert_called_once()
+        mock_legacy_reader.get_unique_categories.assert_called_once_with(fake_session)
+
+    def test_get_unique_years_without_session_uses_cache(
+        self, reader, mock_legacy_reader, mock_query_optimizer
+    ):
+        fake_session = MagicMock()
+        mock_legacy_reader.get_unique_years.return_value = [2023, 2024]
+
+        def _exec(query_builder, cache_key):
+            assert cache_key == "unique_years"
+            return query_builder(fake_session)
+
+        mock_query_optimizer.execute_cached.side_effect = _exec
+        result = reader.get_unique_years()
+
+        assert result == [2023, 2024]
+        mock_query_optimizer.execute_cached.assert_called_once()
+        mock_legacy_reader.get_unique_years.assert_called_once_with(fake_session)
+
+    def test_get_unique_extensions_without_session_uses_cache(
+        self, reader, mock_legacy_reader, mock_query_optimizer
+    ):
+        fake_session = MagicMock()
+        mock_legacy_reader.get_unique_extensions.return_value = [".jpg", ".png"]
+
+        def _exec(query_builder, cache_key):
+            assert cache_key == "unique_extensions"
+            return query_builder(fake_session)
+
+        mock_query_optimizer.execute_cached.side_effect = _exec
+        result = reader.get_unique_extensions()
+
+        assert result == [".jpg", ".png"]
+        mock_query_optimizer.execute_cached.assert_called_once()
+        mock_legacy_reader.get_unique_extensions.assert_called_once_with(fake_session)
+
     def test_build_cache_key_is_stable_for_same_arguments(self, reader):
         key1 = reader._build_cache_key("find_items", {"a": 1}, ["x", "y"], 10)
         key2 = reader._build_cache_key("find_items", {"a": 1}, ["x", "y"], 10)

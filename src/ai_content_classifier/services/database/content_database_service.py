@@ -70,6 +70,14 @@ class ContentDatabaseService(LoggableMixin):
     def create_unit_of_work(self) -> UnitOfWork:
         return self.writer.repos.create_unit_of_work()
 
+    def _invalidate_query_cache(self) -> None:
+        """Invalidate cached query results after write operations."""
+        try:
+            if hasattr(self.query_optimizer, "invalidate_all"):
+                self.query_optimizer.invalidate_all()
+        except Exception as e:
+            self.logger.debug(f"Query cache invalidation failed: {e}")
+
     def serialize_metadata_for_json(
         self, metadata: Optional[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
@@ -105,9 +113,11 @@ class ContentDatabaseService(LoggableMixin):
         refresh: bool = True,
         session: Optional[Session] = None,
     ) -> ContentItem:
-        return self.writer.create_content_item(
+        item = self.writer.create_content_item(
             path, content_type, extract_basic_info, metadata, refresh, session
         )
+        self._invalidate_query_cache()
+        return item
 
     def save_item_batch(
         self,
@@ -115,7 +125,10 @@ class ContentDatabaseService(LoggableMixin):
         refresh: bool = True,
         session: Optional[Session] = None,
     ) -> List[ContentItem]:
-        return self.writer.save_item_batch(items, refresh, session)
+        saved_items = self.writer.save_item_batch(items, refresh, session)
+        if saved_items:
+            self._invalidate_query_cache()
+        return saved_items
 
     def update_metadata_batch(
         self,
@@ -123,7 +136,12 @@ class ContentDatabaseService(LoggableMixin):
         refresh: bool = False,
         session: Optional[Session] = None,
     ) -> int:
-        return self.writer.update_metadata_batch(metadata_updates, refresh, session)
+        updated_count = self.writer.update_metadata_batch(
+            metadata_updates, refresh, session
+        )
+        if updated_count > 0:
+            self._invalidate_query_cache()
+        return updated_count
 
     def find_items(
         self,
@@ -183,7 +201,7 @@ class ContentDatabaseService(LoggableMixin):
         extraction_details: str,
         session: Optional[Session] = None,
     ) -> Optional[ContentItem]:
-        return self.writer.update_content_category(
+        item = self.writer.update_content_category(
             file_path,
             category,
             confidence,
@@ -191,6 +209,9 @@ class ContentDatabaseService(LoggableMixin):
             extraction_details,
             session,
         )
+        if item is not None:
+            self._invalidate_query_cache()
+        return item
 
     def get_uncategorized_items(
         self, content_type: Optional[str] = None, session: Optional[Session] = None
@@ -200,7 +221,10 @@ class ContentDatabaseService(LoggableMixin):
     def clear_content_category(
         self, file_path: str, session: Optional[Session] = None
     ) -> Optional[ContentItem]:
-        return self.writer.clear_content_category(file_path, session)
+        item = self.writer.clear_content_category(file_path, session)
+        if item is not None:
+            self._invalidate_query_cache()
+        return item
 
     def get_unique_categories(self) -> List[str]:
         return self.reader.get_unique_categories()
@@ -220,6 +244,8 @@ class ContentDatabaseService(LoggableMixin):
             if not external_session:
                 session.commit()
             self.logger.info(f"Successfully deleted {num_deleted} content items.")
+            if num_deleted > 0:
+                self._invalidate_query_cache()
             return num_deleted
         except SQLAlchemyError as e:
             if not external_session:
@@ -253,6 +279,8 @@ class ContentDatabaseService(LoggableMixin):
             self.logger.info(
                 f"Successfully deleted {num_deleted} content items by path."
             )
+            if num_deleted > 0:
+                self._invalidate_query_cache()
             return int(num_deleted)
         except SQLAlchemyError as e:
             if not external_session:

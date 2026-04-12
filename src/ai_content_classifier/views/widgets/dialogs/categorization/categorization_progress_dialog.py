@@ -37,7 +37,7 @@ class CategorizationProgressDialog(ThemedDialog):
     Displays real-time progress, results, and logs.
     """
 
-    # Signal pour demander l'annulation du processus
+    # Signal to request process cancellation
     cancellation_requested = pyqtSignal()
     pause_requested = pyqtSignal()
     resume_requested = pyqtSignal()
@@ -50,14 +50,14 @@ class CategorizationProgressDialog(ThemedDialog):
         self.failed_classifications = 0
         self.start_time = time.time()
 
-        # État du dialog
+        # Dialog state
         self.is_completed = False
         self.is_cancelled = False
         self.is_paused = False
         self._confidence_values = []
         self._high_confidence_count = 0
 
-        # Initialiser le dialog de base
+        # Initialize base dialog
         super().__init__(
             parent=parent,
             title="Categorization in Progress",
@@ -78,7 +78,7 @@ class CategorizationProgressDialog(ThemedDialog):
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
 
-        # Timer pour les statistiques
+        # Timer for statistics
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_statistics)
         self.update_timer.start(1000)  # Update every second
@@ -92,14 +92,14 @@ class CategorizationProgressDialog(ThemedDialog):
             parent=self,
         )
 
-        # Conteneur des statistiques
+        # Statistics container
         stats_container = QWidget()
         stats_container.setObjectName("progressStatsContainer")
         stats_layout = QHBoxLayout(stats_container)
         stats_layout.setContentsMargins(12, 8, 12, 8)
         stats_layout.setSpacing(20)
 
-        # Statistiques principales
+        # Main statistics
         self.processed_label = self.create_stat_label(
             "📁 Processed: 0", "processedLabel"
         )
@@ -113,7 +113,7 @@ class CategorizationProgressDialog(ThemedDialog):
         stats_layout.addStretch()
         stats_layout.addWidget(self.speed_label)
 
-        # Ajouter au header
+        # Add to header
         header.add_to_layout(stats_container)
 
         return header
@@ -134,7 +134,7 @@ class CategorizationProgressDialog(ThemedDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(20)
 
-        # Panneau de progression principal
+        # Main progress panel
         self.progress_panel = ProgressPanel(
             parent=self,
             title="Categorization Progress",
@@ -184,7 +184,7 @@ class CategorizationProgressDialog(ThemedDialog):
             ["File", "Category", "Confidence", "Time"]
         )
 
-        # Configuration du tableau
+        # Table configuration
         self.results_table.setAlternatingRowColors(True)
         self.results_table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
@@ -192,7 +192,7 @@ class CategorizationProgressDialog(ThemedDialog):
         self.results_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.results_table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
 
-        # Redimensionnement automatique
+        # Auto resize
         header = self.results_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -273,7 +273,7 @@ class CategorizationProgressDialog(ThemedDialog):
 
     def create_footer(self) -> QFrame:
         """Create the footer with control buttons."""
-        # Utiliser ActionBar pour les boutons
+        # Use ActionBar for buttons
         action_bar = ActionBar(self, alignment="right")
 
         # Control buttons
@@ -285,13 +285,13 @@ class CategorizationProgressDialog(ThemedDialog):
         self.pause_button = action_bar.get_action_button("pauseButton")
         self.stop_button = action_bar.get_action_button("stopButton")
 
-        # État initial
+        # Initial state
         self.pause_button.setEnabled(True)
 
         return action_bar
 
     def toggle_pause(self):
-        """Basculer entre pause et reprise."""
+        """Toggle between pause and resume."""
         if self.is_completed or self.is_cancelled:
             return
 
@@ -352,7 +352,7 @@ class CategorizationProgressDialog(ThemedDialog):
             else:
                 eta_text = "ETA: Calculating..."
 
-            # Formatage de la vitesse
+            # Speed formatting
             if speed < 1:
                 speed_text = f"{speed * 60:.1f} files/min"
             else:
@@ -429,18 +429,18 @@ class CategorizationProgressDialog(ThemedDialog):
             if self.results_table.rowCount() >= 100:
                 self.results_table.removeRow(0)
 
-            # Ajouter la nouvelle ligne
+            # Add new row
             row = self.results_table.rowCount()
             self.results_table.insertRow(row)
 
             # Create items
             filename = os.path.basename(file_path)
             filename_item = QTableWidgetItem(filename)
-            filename_item.setToolTip(file_path)  # Chemin complet en tooltip
+            filename_item.setToolTip(file_path)  # Full path in tooltip
 
             category_item = QTableWidgetItem(category)
 
-            # Coloration selon la confiance
+            # Color hint by confidence
             confidence_item = QTableWidgetItem(f"{confidence:.1%}")
             if confidence >= 0.8:
                 confidence_item.setToolTip("High confidence")
@@ -464,7 +464,7 @@ class CategorizationProgressDialog(ThemedDialog):
             # Scroll to bottom
             self.results_table.scrollToBottom()
 
-            # Log dans le ProgressPanel
+            # Log in ProgressPanel
             status = "✅" if confidence >= 0.6 else "⚠️"
             self.progress_panel.log_message(
                 f"{status} {filename} → {category} ({confidence:.1%})"
@@ -474,7 +474,7 @@ class CategorizationProgressDialog(ThemedDialog):
             self.logger.error(f"Error adding result: {e}")
 
     def add_log(self, message: str):
-        """Ajoute un message aux logs."""
+        """Add a message to logs."""
         try:
             self.progress_panel.log_message(message)
         except Exception as e:
@@ -518,7 +518,7 @@ class CategorizationProgressDialog(ThemedDialog):
         """Set the final categorization status."""
         self.is_completed = True
 
-        # Terminer la progression
+        # Complete progress
         self.progress_panel.complete_progress(success=success)
 
         if success:
@@ -543,7 +543,7 @@ class CategorizationProgressDialog(ThemedDialog):
         if hasattr(self, "update_timer"):
             self.update_timer.stop()
 
-        # Statistiques finales
+        # Final statistics
         total_time = time.time() - self.start_time
         self.add_log(
             f"📊 Final stats: {self.successful_classifications} successful, {self.failed_classifications} failed in {total_time:.1f}s"
@@ -566,17 +566,17 @@ class CategorizationProgressDialog(ThemedDialog):
             self.add_log("ℹ️ Progress window hidden (categorization continues)")
             event.ignore()
         else:
-            # Nettoyer le timer
+            # Clean up timer
             if hasattr(self, "update_timer"):
                 self.update_timer.stop()
-            event.accept()  # Permettre la fermeture
+            event.accept()  # Allow closing
 
     def validate_configuration(self) -> tuple[bool, str]:
         """Validation for ThemedDialog (not really needed here)."""
         return True, ""
 
     def get_configuration(self) -> Dict[str, Any]:
-        """Retourne les statistiques finales."""
+        """Return final statistics."""
         return {
             "total_files": self.total_files,
             "processed_files": self.processed_files,

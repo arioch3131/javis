@@ -1,8 +1,8 @@
 """
-Builders et coordinateurs pour MainWindow.
+Builders and coordinators for MainWindow.
 
 These modules split MainWindow construction into components
-modulaires et maintenables.
+that are modular and maintainable.
 """
 
 from .main import MainWindow

@@ -197,7 +197,7 @@ class ScanPipelineService(LoggableMixin):
         self.scanner.cancel_scan()
 
     def _process_single_file(self, file_path: str, directory: str) -> dict:
-        """Processes one file: metadata, thumbnail, then DB save."""
+        """Processes one file: metadata, then DB save."""
         result = {
             "file_path": file_path,
             "directory": directory,
@@ -216,11 +216,6 @@ class ScanPipelineService(LoggableMixin):
             metadata = self.metadata_service.get_all_metadata(file_path)
             if metadata and "error" not in metadata:
                 result["metadata_success"] = True
-
-            if self._is_image_file(file_path):
-                thumbnail_result = self.thumbnail_service.create_thumbnail(file_path)
-                if thumbnail_result and thumbnail_result.success:
-                    result["thumbnail_success"] = True
 
             content_type = self._determine_content_type(file_path)
             self.db_service.create_content_item(

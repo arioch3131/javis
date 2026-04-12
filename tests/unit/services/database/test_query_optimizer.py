@@ -168,3 +168,15 @@ class TestQueryOptimizer:
 
         assert not hasattr(metrics, "cache_hits")
         assert not hasattr(metrics, "cache_misses")
+
+    def test_invalidate_all_deletes_tracked_keys(self, optimizer, mock_runtime):
+        query_obj = MagicMock()
+        query_obj.all.return_value = ["fresh"]
+
+        optimizer.execute_cached(lambda _s: query_obj, cache_key="k1")
+        optimizer.execute_cached(lambda _s: query_obj, cache_key="k2")
+
+        optimizer.invalidate_all()
+
+        mock_runtime.delete.assert_any_call("query:k1", adapter="memory")
+        mock_runtime.delete.assert_any_call("query:k2", adapter="memory")

@@ -45,7 +45,7 @@ class EnhancedContentReader:
         Same signature for compatibility.
         """
 
-        # Si session fournie, utiliser le comportement legacy (pas de cache)
+        # If an external session is provided, use legacy behavior (no cache).
         if session is not None:
             return self._legacy_reader.find_items(
                 content_filter,
@@ -70,7 +70,7 @@ class EnhancedContentReader:
             custom_filter,
         )
 
-        # Creater le query builder
+        # Build query callable.
         def query_builder(session):
             return self._legacy_reader.find_items(
                 content_filter,
@@ -94,7 +94,7 @@ class EnhancedContentReader:
         return results
 
     def count_all_items(self, session: Optional[Session] = None) -> int:
-        """Compte avec cache si pas de session externe"""
+        """Count items with cache when no external session is provided."""
 
         if session is not None:
             return self._legacy_reader.count_all_items(session)
@@ -108,6 +108,42 @@ class EnhancedContentReader:
 
         self.metrics.total_files = count
         return count
+
+    def get_unique_categories(self, session: Optional[Session] = None) -> List[str]:
+        """Return unique categories with cache when no external session is provided."""
+        if session is not None:
+            return self._legacy_reader.get_unique_categories(session)
+
+        def query_builder(session):
+            return self._legacy_reader.get_unique_categories(session)
+
+        return self.query_optimizer.execute_cached(
+            query_builder, cache_key="unique_categories"
+        )
+
+    def get_unique_years(self, session: Optional[Session] = None) -> List[int]:
+        """Return unique years with cache when no external session is provided."""
+        if session is not None:
+            return self._legacy_reader.get_unique_years(session)
+
+        def query_builder(session):
+            return self._legacy_reader.get_unique_years(session)
+
+        return self.query_optimizer.execute_cached(
+            query_builder, cache_key="unique_years"
+        )
+
+    def get_unique_extensions(self, session: Optional[Session] = None) -> List[str]:
+        """Return unique extensions with cache when no external session is provided."""
+        if session is not None:
+            return self._legacy_reader.get_unique_extensions(session)
+
+        def query_builder(session):
+            return self._legacy_reader.get_unique_extensions(session)
+
+        return self.query_optimizer.execute_cached(
+            query_builder, cache_key="unique_extensions"
+        )
 
     def __getattr__(self, name):
         """

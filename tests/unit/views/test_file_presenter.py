@@ -131,3 +131,36 @@ def test_clear_category_request_stops_when_item_not_found():
     presenter._details_dialog.set_file_details.assert_not_called()
     main_window.file_manager.refresh_and_emit_visible_files.assert_not_called()
     presenter.refresh_file_list.assert_not_called()
+
+
+def test_build_file_data_uses_batched_find_items_instead_of_n_plus_one():
+    presenter = FilePresenter(MagicMock(), MagicMock())
+    presenter.db_service.find_items.return_value = [
+        MagicMock(path="/tmp/a.jpg", category="Animals", content_type="image"),
+        MagicMock(path="/tmp/b.pdf", category="Docs", content_type="document"),
+    ]
+
+    file_data = presenter._build_file_data(
+        [("/tmp/a.jpg", "/tmp"), ("/tmp/b.pdf", "/tmp")]
+    )
+
+    assert file_data == [
+        ("/tmp/a.jpg", "/tmp", "Animals", "image"),
+        ("/tmp/b.pdf", "/tmp", "Docs", "document"),
+    ]
+    presenter.db_service.find_items.assert_called_once()
+    presenter.db_service.get_content_by_path.assert_not_called()
+
+
+def test_build_file_data_batches_when_input_is_large():
+    presenter = FilePresenter(MagicMock(), MagicMock())
+    files = [(f"/tmp/{idx}.jpg", "/tmp") for idx in range(1205)]
+    presenter.db_service.find_items.side_effect = [
+        [MagicMock(path="/tmp/0.jpg", category="A", content_type="image")],
+        [MagicMock(path="/tmp/801.jpg", category="B", content_type="image")],
+    ]
+
+    file_data = presenter._build_file_data(files)
+
+    assert len(file_data) == 1205
+    assert presenter.db_service.find_items.call_count == 2

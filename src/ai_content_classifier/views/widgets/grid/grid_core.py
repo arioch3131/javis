@@ -74,7 +74,7 @@ class SmartPoolPixmapCache:
             max_age_seconds=120,
             cleanup_interval=30,
             enable_background_cleanup=True,
-            enable_performance_metrics=True,
+            enable_performance_metrics=False,
             enable_auto_tuning=False,
             auto_wrap_objects=False,
             extra_config={
@@ -206,7 +206,7 @@ class UltraOptimizedThumbnailGrid(QWidget):
     """
     Ultra-optimized grid for hundreds of gigabytes of data.
     Combines virtualization, moving window, and intelligent caching.
-    VERSION CORRIGÉE pour le filtrage.
+    Corrected version for filtering behavior.
     """
 
     file_selected = pyqtSignal(str)
@@ -221,7 +221,7 @@ class UltraOptimizedThumbnailGrid(QWidget):
         self.thumbnail_size = 150
         self.max_concurrent_generation = 3
 
-        # Data and cache - CORRECTION : pas de filtrage interne
+        # Data and cache - no internal filtering
         self.all_file_data: List[Tuple[str, str, str, str]] = []  # Data as received
         self.thumbnail_cache = SmartPoolPixmapCache(
             target_size=self.thumbnail_size,
@@ -445,7 +445,7 @@ class UltraOptimizedThumbnailGrid(QWidget):
         # CRITICAL FIX: Clear all existing widgets when new data arrives
         self.clear_all_widgets()
 
-        # Store all data (metadata only) - DÉJÀ FILTRÉES
+        # Store all data (metadata only) - already filtered
         self.all_file_data = file_data
 
         # Update metrics
@@ -523,7 +523,7 @@ class UltraOptimizedThumbnailGrid(QWidget):
             if list_index >= len(self.all_file_data):
                 continue
 
-            # Get data - CORRECTION: utilise directement all_file_data
+            # Get data directly from all_file_data
             file_path, directory, category, content_type = self.all_file_data[
                 list_index
             ]

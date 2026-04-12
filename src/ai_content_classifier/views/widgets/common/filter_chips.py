@@ -1,6 +1,6 @@
 # views/widgets/common/filter_chips.py
 """
-FilterChips - Puces de filtres reusables.
+FilterChips - Reusable filter chips.
 
 Widget to display and manage chip-based filters
 with multi-selection support and an intuitive interface.
@@ -32,13 +32,13 @@ from ai_content_classifier.views.widgets.base.themed_widget import ThemedWidget
 
 class FilterChip(QWidget):  # Changed from QPushButton to QWidget
     """
-    Puce de filtre individuelle.
+    Individual filter chip.
 
     Represents a single filter with selectable state
-    et d'actions contextuelles.
+    and contextual actions.
     """
 
-    # Signaux
+    # Signals
     chip_clicked = pyqtSignal(str, bool)  # (filter_id, is_selected)
     chip_removed = pyqtSignal(str)  # filter_id
     chip_edited = pyqtSignal(str, str)  # (filter_id, new_value)
@@ -112,7 +112,7 @@ class FilterChip(QWidget):  # Changed from QPushButton to QWidget
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
     def _format_label(self) -> str:
-        """Formate le label de la puce."""
+        """Format chip label."""
         # Icons by type
         icons = {
             "category": "📁",
@@ -132,12 +132,12 @@ class FilterChip(QWidget):  # Changed from QPushButton to QWidget
         self.chip_clicked.emit(self.filter_id, checked)
 
     def set_selected(self, selected: bool):
-        """Set l'state de selection."""
+        """Set selection state."""
         self.is_selected = selected
         self.label_button.setChecked(selected)
 
     def set_label(self, label: str):
-        """Update le label."""
+        """Update label."""
         self.label = label
         self.label_button.setText(self._format_label())
 
@@ -154,16 +154,16 @@ class FilterChip(QWidget):  # Changed from QPushButton to QWidget
 
 class FilterChipsContainer(ThemedWidget):
     """
-    Conteneur pour les puces de filtres.
+    Container for filter chips.
 
     Manages a collection of chips with advanced features:
-    - Selection multiple
-    - Groupement par type
-    - Filtrage et recherche
-    - Actions en lot
+    - Multi-selection
+    - Grouping by type
+    - Filtering and search
+    - Batch actions
     """
 
-    # Signaux
+    # Signals
     filters_changed = pyqtSignal(dict)  # {filter_id: is_selected}
     filter_added = pyqtSignal(str, str)  # (filter_id, label)
     filter_removed = pyqtSignal(str)  # filter_id
@@ -196,7 +196,7 @@ class FilterChipsContainer(ThemedWidget):
         self.setup_ui()
 
     def setup_ui(self):
-        """Configure l'interface du conteneur."""
+        """Configure container UI."""
         layout = self.get_main_layout()
         layout.setSpacing(8)
 
@@ -204,7 +204,7 @@ class FilterChipsContainer(ThemedWidget):
         self.header_container = self.create_header()
         layout.addWidget(self.header_container)
 
-        # Zone de filtres avec scroll
+        # Scrollable filters area
         self.filters_scroll = QScrollArea()
         self.filters_scroll.setObjectName("filtersScroll")
         self.filters_scroll.setWidgetResizable(True)
@@ -218,7 +218,7 @@ class FilterChipsContainer(ThemedWidget):
             400
         )  # Increased height to reduce forced scrolling
 
-        # Widget interne pour les filtres
+        # Internal widget for filters
         self.filters_widget = QWidget()
         self.filters_widget.setObjectName("filtersWidget")
 
@@ -230,11 +230,11 @@ class FilterChipsContainer(ThemedWidget):
         self.filters_scroll.setWidget(self.filters_widget)
         layout.addWidget(self.filters_scroll, 1)
 
-        # Actions rapides
+        # Quick actions
         self.actions_container = self.create_actions()
         layout.addWidget(self.actions_container)
 
-        # Message d'state
+        # Status message
         self.status_label = QLabel("No active filters")
         self.status_label.setObjectName("statusLabel")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -242,7 +242,7 @@ class FilterChipsContainer(ThemedWidget):
         layout.addWidget(self.status_label)
 
     def create_header(self) -> QFrame:
-        """Create l'header du conteneur."""
+        """Create container header."""
         header = QFrame()
         header.setObjectName("filtersHeader")
 
@@ -250,14 +250,14 @@ class FilterChipsContainer(ThemedWidget):
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(8)
 
-        # Titre
+        # Title
         self.title_label = QLabel(self.title)
         self.title_label.setFont(self.create_bold_font(1))
         layout.addWidget(self.title_label)
 
         layout.addStretch()
 
-        # Compteur de selections
+        # Selection counter
         self.count_label = QLabel("0 selected")
         self.count_label.setObjectName("countLabel")
         self.count_label.setFont(self.create_bold_font())
@@ -266,7 +266,7 @@ class FilterChipsContainer(ThemedWidget):
         return header
 
     def create_actions(self) -> QFrame:
-        """Create la barre d'actions."""
+        """Create action bar."""
         actions = QFrame()
         actions.setObjectName("filtersActions")
 
@@ -274,7 +274,7 @@ class FilterChipsContainer(ThemedWidget):
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(8)
 
-        # Bouton tout selectionner
+        # Select-all button
         self.select_all_button = QPushButton("Select All")
         self.select_all_button.setObjectName("selectAllButton")
         self.select_all_button.clicked.connect(self.select_all_filters)
@@ -288,7 +288,7 @@ class FilterChipsContainer(ThemedWidget):
 
         layout.addStretch()
 
-        # Bouton d'options
+        # Options button
         self.options_button = QPushButton("⚙️")
         self.options_button.setObjectName("optionsButton")
         self.options_button.setFixedSize(32, 32)
@@ -298,17 +298,17 @@ class FilterChipsContainer(ThemedWidget):
         return actions
 
     def _show_options_menu(self):
-        """Affiche le menu d'options."""
+        """Show options menu."""
         menu = QMenu(self)
 
-        # Option groupement
+        # Grouping option
         group_action = QAction("📂 Group by type", self)
         group_action.setCheckable(True)
         group_action.setChecked(self.group_by_type)
         group_action.triggered.connect(self._toggle_grouping)
         menu.addAction(group_action)
 
-        # Option selection multiple
+        # Multi-selection option
         multi_action = QAction("☑️ Multiple selection", self)
         multi_action.setCheckable(True)
         multi_action.setChecked(self.allow_multiple)
@@ -317,7 +317,7 @@ class FilterChipsContainer(ThemedWidget):
 
         menu.addSeparator()
 
-        # Actions de nettoyage
+        # Cleanup actions
         remove_unselected_action = QAction("🗑️ Remove unselected", self)
         remove_unselected_action.triggered.connect(self._remove_unselected_filters)
         menu.addAction(remove_unselected_action)
@@ -335,13 +335,13 @@ class FilterChipsContainer(ThemedWidget):
         is_removable: bool = True,
     ) -> FilterChip:
         """
-        Ajoute un nouveau filtre.
+        Add a new filter.
 
         Args:
-            filter_id: Identifiant unique du filtre
+            filter_id: Unique filter identifier
             label: Label to display
-            filter_type: Type de filtre (category, date, etc.)
-            is_selected: State initial de selection
+            filter_type: Filter type (category, date, etc.)
+            is_selected: Initial selection state
             is_removable: Whether the filter can be removed
 
         Returns:
@@ -354,7 +354,7 @@ class FilterChipsContainer(ThemedWidget):
             chip.set_selected(is_selected)
             return chip
 
-        # Creater la nouvelle puce
+        # Create new chip
         chip = FilterChip(
             filter_id=filter_id,
             label=label,
@@ -364,15 +364,15 @@ class FilterChipsContainer(ThemedWidget):
             parent=self.filters_widget,
         )
 
-        # Connexions
+        # Connections
         chip.chip_clicked.connect(self._on_chip_clicked)
         chip.chip_removed.connect(self._on_chip_removed)
 
-        # Enregistrer
+        # Store state
         self.chips[filter_id] = chip
         self.selection_state[filter_id] = is_selected
 
-        # Ajouter au groupe
+        # Add to group
         if filter_type not in self.filter_groups:
             self.filter_groups[filter_type] = []
         self.filter_groups[filter_type].append(filter_id)
@@ -383,7 +383,7 @@ class FilterChipsContainer(ThemedWidget):
         # Update state
         self._update_interface_state()
 
-        # Signaux
+        # Signals
         self.filter_added.emit(filter_id, label)
         self._emit_filters_changed()
 
@@ -391,8 +391,8 @@ class FilterChipsContainer(ThemedWidget):
         return chip
 
     def _add_chip_to_layout(self, chip: FilterChip, filter_type: str):
-        """Ajoute une puce au layout selon la configuration."""
-        # Trouver ou creater le groupe
+        """Add chip to layout based on current configuration."""
+        # Find or create group
         group_layout = self._get_or_create_group_layout(filter_type)
         group_layout.addWidget(chip)
 
@@ -400,15 +400,15 @@ class FilterChipsContainer(ThemedWidget):
         """Get or create layout for a filter group."""
         group_id = f"group_{filter_type}"
 
-        # Chercher le groupe existant
+        # Find existing group
         for i in range(self.filters_layout.count()):
             item = self.filters_layout.itemAt(i)
             if item and item.widget() and item.widget().objectName() == group_id:
-                # Trouver le layout des puces dans ce groupe
+                # Find chips layout inside this group
                 group_widget = item.widget()
-                return group_widget.layout().itemAt(1).layout()  # Layout des puces
+                return group_widget.layout().itemAt(1).layout()  # Chips layout
 
-        # Creater un nouveau groupe
+        # Create new group
         group_widget = QFrame()
         group_widget.setObjectName(group_id)
         group_widget.setProperty("isFilterGroup", True)
@@ -417,7 +417,7 @@ class FilterChipsContainer(ThemedWidget):
         group_layout.setContentsMargins(8, 8, 8, 8)
         group_layout.setSpacing(6)
 
-        # Titre du groupe
+        # Group title
         type_labels = {
             "file_type": "Type",
             "category": "Category",
@@ -432,20 +432,20 @@ class FilterChipsContainer(ThemedWidget):
         group_title.setFont(self.create_bold_font())
         group_layout.addWidget(group_title)
 
-        # Layout pour les puces
+        # Layout for chips
         chips_layout = QVBoxLayout()
         chips_layout.setSpacing(4)
         chips_layout.setContentsMargins(0, 0, 0, 0)
         group_layout.addLayout(chips_layout)
 
-        # Ajouter le groupe au layout principal
+        # Add group to main layout
         self.filters_layout.addWidget(group_widget)
 
         return chips_layout
 
     def remove_filter(self, filter_id: str):
         """
-        Supprime un filtre actif.
+        Remove an active filter.
         """
         if filter_id in self.chips:
             chip = self.chips.pop(filter_id)
@@ -470,7 +470,7 @@ class FilterChipsContainer(ThemedWidget):
 
     def _on_chip_clicked(self, filter_id: str, is_selected: bool):
         """Called when a chip is clicked."""
-        # Gestion de la selection exclusive
+        # Exclusive selection handling
         if not self.allow_multiple and is_selected:
             # Deselect all others
             for other_id, other_chip in self.chips.items():
@@ -478,7 +478,7 @@ class FilterChipsContainer(ThemedWidget):
                     other_chip.set_selected(False)
                     self.selection_state[other_id] = False
 
-        # Validation du nombre maximum
+        # Max selection validation
         if (
             self.max_selections > 0
             and is_selected
@@ -498,7 +498,7 @@ class FilterChipsContainer(ThemedWidget):
                 fid for fid, selected in self.selection_state.items() if selected
             ]
             if not self.custom_validator(selected_filters):
-                # Cancelr la selection
+                # Cancel selection
                 chip = self.chips[filter_id]
                 chip.set_selected(not is_selected)
                 self.selection_state[filter_id] = not is_selected
@@ -507,15 +507,15 @@ class FilterChipsContainer(ThemedWidget):
         # Update interface
         self._update_interface_state()
 
-        # Émettre le signal
+        # Emit signal
         self._emit_filters_changed()
 
     def _on_chip_removed(self, filter_id: str):
-        """Called quand une puce demande sa suppression."""
+        """Called when a chip requests its removal."""
         self.remove_filter(filter_id)
 
     def select_all_filters(self):
-        """Selectionne tous les filtres."""
+        """Select all filters."""
         if not self.allow_multiple:
             return
 
@@ -566,7 +566,7 @@ class FilterChipsContainer(ThemedWidget):
         self._emit_filters_changed()
 
     def _rebuild_layout(self):
-        """Reconstruit le layout selon la configuration."""
+        """Rebuild layout according to current configuration."""
         # IMPORTANT:
         # Clearing group widgets can destroy child chips at C++ level.
         # Rebuild from immutable data instead of reusing widget instances.
@@ -593,7 +593,7 @@ class FilterChipsContainer(ThemedWidget):
         # to avoid feedback loops with presenters/managers.
 
     def _clear_layout(self):
-        """Vide le layout des filtres."""
+        """Clear filters layout."""
         while self.filters_layout.count():
             item = self.filters_layout.takeAt(0)
             if item.widget():
@@ -611,20 +611,20 @@ class FilterChipsContainer(ThemedWidget):
                 self._clear_sub_layout(item.layout())
 
     def _update_interface_state(self):
-        """Update l'state de l'interface."""
+        """Update UI state."""
         selected_count = sum(self.selection_state.values())
         total_count = len(self.chips)
 
-        # Compteur
+        # Counter
         self.count_label.setText(f"{selected_count} of {total_count} selected")
 
-        # Boutons
+        # Buttons
         self.select_all_button.setEnabled(
             total_count > 0 and selected_count < total_count and self.allow_multiple
         )
         self.clear_all_button.setEnabled(selected_count > 0)
 
-        # Message d'state
+        # Status message
         if total_count == 0:
             self.status_label.setText("No filters available")
             self.status_label.show()
@@ -634,7 +634,7 @@ class FilterChipsContainer(ThemedWidget):
             self.filters_scroll.show()
 
     def _emit_filters_changed(self):
-        """Émet le signal de changement des filtres."""
+        """Emit filters-changed signal."""
         if self._suppress_signal_emits:
             return
         self.filters_changed.emit(self.selection_state.copy())
@@ -648,14 +648,14 @@ class FilterChipsContainer(ThemedWidget):
         except Exception as e:
             self.logger.error(f"Error applying filter chips theme: {e}")
 
-    # === API PUBLIQUE ===
+    # === PUBLIC API ===
 
     def set_filters(self, filters: List[Dict[str, Any]]):
         """
         Set full filter list.
 
         Args:
-            filters: Liste de dictionnaires avec keys: id, label, type, selected, removable
+            filters: List of dictionaries with keys: id, label, type, selected, removable
         """
         self.logger.debug(
             f"📥 FilterChipsContainer.set_filters RECEIVED: {len(filters)} filters"
@@ -665,11 +665,11 @@ class FilterChipsContainer(ThemedWidget):
         self.blockSignals(True)
 
         try:
-            # Vider les filtres existants
+            # Clear existing filters
             self.clear_all_filters_completely()
             self._clear_layout()
 
-            # Ajouter les nouveaux filtres
+            # Add new filters
             for filter_data in filters:
                 self.add_filter(
                     filter_id=filter_data["id"],
@@ -694,7 +694,7 @@ class FilterChipsContainer(ThemedWidget):
         return {fid: chip.get_filter_data() for fid, chip in self.chips.items()}
 
     def set_filter_selected(self, filter_id: str, selected: bool):
-        """Set l'state de selection d'un filtre."""
+        """Set selection state of a filter."""
         if filter_id in self.chips:
             self.chips[filter_id].set_selected(selected)
             self.selection_state[filter_id] = selected
@@ -707,7 +707,7 @@ class FilterChipsContainer(ThemedWidget):
             self.remove_filter(filter_id)
 
     def set_max_selections(self, max_count: int):
-        """Set le nombre maximum de selections."""
+        """Set maximum number of selections."""
         self.max_selections = max_count
 
     def set_custom_validator(self, validator: Callable[[List[str]], bool]):

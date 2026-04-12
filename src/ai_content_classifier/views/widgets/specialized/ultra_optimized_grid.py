@@ -17,7 +17,7 @@ class UltraOptimizedThumbnailGridWidget(QWidget):
     """
     Main ultra-optimized widget to replace ThumbnailGridWidget.
     Designed for hundreds of gigabytes of data.
-    VERSION CORRIGÉE pour le filtrage.
+    Corrected version for filtering behavior.
     """
 
     file_selected = pyqtSignal(str)
@@ -70,7 +70,7 @@ class UltraOptimizedThumbnailGridWidget(QWidget):
     def set_name_filters(self, name_filters):
         """
         FIX: This method does nothing because data already arrives filtered.
-        Le filtrage se fait en amont dans le file_manager et file_presenter.
+        Filtering is handled upstream by file_manager and file_presenter.
         """
         # Do nothing; data already arrives filtered via set_file_data()
         pass

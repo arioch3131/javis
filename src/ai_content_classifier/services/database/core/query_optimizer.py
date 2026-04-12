@@ -2,6 +2,7 @@
 """Query optimizer with optional omni-cache integration."""
 
 import hashlib
+from threading import RLock
 from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
@@ -23,6 +24,8 @@ class QueryOptimizer:
         self.metrics = metrics  # PerformanceMetrics
         self.cache_ttl_seconds = cache_ttl_seconds
         self._cache_runtime = get_cache_runtime()
+        self._cache_keys: set[str] = set()
+        self._cache_keys_lock = RLock()
 
     def execute_cached(
         self,
@@ -33,7 +36,7 @@ class QueryOptimizer:
         """
         Execute query with automatic caching.
         """
-        # Si session externe, pas de cache
+        # If an external session is provided, bypass cache.
         if session is not None:
             return self._execute_query(query_builder, session)
 
@@ -49,11 +52,23 @@ class QueryOptimizer:
 
         self._record_cache_miss()
         result = self._execute_query(query_builder, None)
-        self._cache_runtime.set(
+        cached = self._cache_runtime.set(
             omni_key, result, ttl=self.cache_ttl_seconds, adapter="memory"
         )
+        if cached:
+            with self._cache_keys_lock:
+                self._cache_keys.add(omni_key)
 
         return result
+
+    def invalidate_all(self) -> None:
+        """Invalidate all query cache entries created by this optimizer."""
+        with self._cache_keys_lock:
+            keys = list(self._cache_keys)
+            self._cache_keys.clear()
+
+        for key in keys:
+            self._cache_runtime.delete(key, adapter="memory")
 
     def _execute_query(self, query_builder: Callable, session: Optional[Session]):
         """Execute query"""
@@ -63,7 +78,7 @@ class QueryOptimizer:
         try:
             query = query_builder(session)
 
-            # Si c'est un objet Query SQLAlchemy
+            # If this is a SQLAlchemy Query object.
             if hasattr(query, "all"):
                 return query.all()
             # If it is already a result
@@ -77,12 +92,12 @@ class QueryOptimizer:
         """Generate unique query key"""
         import inspect
 
-        # Utiliser le code source de la fonction
+        # Use function source code when available.
         try:
             source = inspect.getsource(query_builder)
             key_data = f"query_{hashlib.md5(source.encode()).hexdigest()}"
         except (OSError, TypeError):
-            # Fallback si on ne peut pas obtenir le source
+            # Fallback when source cannot be retrieved.
             key_data = f"query_{id(query_builder)}"
 
         return key_data

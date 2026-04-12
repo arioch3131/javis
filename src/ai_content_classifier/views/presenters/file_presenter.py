@@ -1,4 +1,4 @@
-# presenters/file_presenter.py - CORRECTED VERSION
+# presenters/file_presenter.py
 """
 File Presenter - Presentation and display of files in the interface.
 CORRECTED: Uses the correct ThumbnailService API and centralized file type service.
@@ -6,7 +6,7 @@ CORRECTED: Uses the correct ThumbnailService API and centralized file type servi
 
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
@@ -22,6 +22,7 @@ from ai_content_classifier.views.widgets.dialogs.file.file_details_dialog import
 )
 
 from ai_content_classifier.services.thumbnail.thumbnail_service import ThumbnailService
+from ai_content_classifier.models.content_models import ContentItem
 
 try:
     from PIL import Image
@@ -224,13 +225,7 @@ class FilePresenter(QObject):
         self, files: List[Tuple[str, str]]
     ) -> List[Tuple[str, str, str, str]]:
         """Builds UI tuples (path, directory, category, content_type)."""
-        file_data: List[Tuple[str, str, str, str]] = []
-        for file_path, directory in files:
-            content_item = self.db_service.get_content_by_path(file_path)
-            category = content_item.category if content_item else "Uncategorized"
-            content_type = content_item.content_type if content_item else "Unknown"
-            file_data.append((file_path, directory, category, content_type))
-        return file_data
+        return _build_file_data_batched(files, self.db_service)
 
     def _on_file_data_ready(self, request_id: int, file_data: list):
         """Applies async-built file data if it matches the latest request."""
@@ -769,14 +764,59 @@ class _FileDataWorker(QThread):
 
     def run(self):
         try:
-            file_data: List[Tuple[str, str, str, str]] = []
-            for file_path, directory in self.displayed_files:
-                if self.isInterruptionRequested():
-                    return
-                content_item = self.db_service.get_content_by_path(file_path)
-                category = content_item.category if content_item else "Uncategorized"
-                content_type = content_item.content_type if content_item else "Unknown"
-                file_data.append((file_path, directory, category, content_type))
+            file_data = _build_file_data_batched(
+                self.displayed_files,
+                self.db_service,
+                should_interrupt=self.isInterruptionRequested,
+            )
+            if file_data is None:
+                return
             self.file_data_ready.emit(self.request_id, file_data)
         except Exception as e:
             self.file_data_error.emit(self.request_id, str(e))
+
+
+def _build_file_data_batched(
+    files: List[Tuple[str, str]],
+    db_service: ContentDatabaseService,
+    batch_size: int = 800,
+    should_interrupt: Optional[Callable[[], bool]] = None,
+) -> Optional[List[Tuple[str, str, str, str]]]:
+    """
+    Build UI tuples by loading DB content in batches instead of N+1 queries.
+    """
+    if not files:
+        return []
+
+    unique_paths = [file_path for file_path, _ in files if file_path]
+    unique_paths = list(dict.fromkeys(unique_paths))
+    content_by_path: Dict[str, Any] = {}
+
+    for index in range(0, len(unique_paths), batch_size):
+        if should_interrupt and should_interrupt():
+            return None
+
+        batch_paths = unique_paths[index : index + batch_size]
+        batch_items = db_service.find_items(
+            custom_filter=[ContentItem.path.in_(batch_paths)],
+            eager_load=False,
+        )
+        for item in batch_items:
+            if hasattr(item, "path"):
+                content_by_path[item.path] = item
+
+    file_data: List[Tuple[str, str, str, str]] = []
+    for file_path, directory in files:
+        if should_interrupt and should_interrupt():
+            return None
+
+        content_item = content_by_path.get(file_path)
+        category = (
+            getattr(content_item, "category", None) if content_item else None
+        ) or "Uncategorized"
+        content_type = (
+            getattr(content_item, "content_type", None) if content_item else None
+        ) or "Unknown"
+        file_data.append((file_path, directory, category, content_type))
+
+    return file_data
