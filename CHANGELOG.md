@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-12
+
+### Changed
+- Upgraded `omni-cache` to `v1.2.0` to align runtime caching behavior with recent SmartPool improvements.
+- Optimized DB-backed filtering paths (`category`, `year`, `uncategorized`) to avoid repeated per-item lookups on large datasets.
+- Added caching for filter option lists (unique categories, years, extensions) with proper invalidation on DB writes.
+- Reworked file-data preparation for UI views to use batched reads instead of per-file DB access.
+- Switched search index creation in the main window to lazy initialization so initial loads stay fast when no search is active.
+- Removed thumbnail generation from the scan pipeline; thumbnails are now generated on demand by the view flow.
+
+### Fixed
+- Fixed SQLAlchemy detached-instance failures during year filtering by loading required fields eagerly.
+- Improved query cache invalidation after content writes (create/update/delete/clear) to avoid stale reads.
+- Clearing the content database now also clears the thumbnail disk cache (and runtime thumbnail cache when available), preventing stale thumbnail leftovers.
+
+### Security
+- Upgraded `pypdf` to `6.10.0` to address a memory-usage vulnerability where a crafted PDF could trigger excessive memory consumption when parsing XMP metadata.
+
 ## [1.0.0] - 2026-04-05
 
 ### Added
