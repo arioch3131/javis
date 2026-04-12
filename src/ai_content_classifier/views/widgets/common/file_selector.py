@@ -65,7 +65,7 @@ class FileSelector(ThemedWidget):
         self.placeholder_text = placeholder or self._get_default_placeholder()
 
         # Validation
-        self.file_filters = []  # Liste de filtres (ex: "*.txt")
+        self.file_filters = []  # List of filters (eg.: "*.txt")
         self.extension_filters = []  # Allowed extensions
         self.must_exist = True  # File/folder must exist
         self.custom_validator: Optional[Callable[[str], tuple[bool, str]]] = None

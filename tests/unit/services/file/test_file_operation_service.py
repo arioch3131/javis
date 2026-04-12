@@ -84,6 +84,7 @@ class TestFileOperationService:
         service.db_service.count_all_items.assert_called_once()
         updated.assert_called if False else None
         assert updated == [[("/ok.jpg", "/ok")]]
+        assert service._current_content_by_path["/ok.jpg"] is valid_item
 
     def test_refresh_file_list_exception(self, service):
         errors = []
@@ -148,9 +149,10 @@ class TestFileOperationService:
 
     def test_apply_filter_to_list_for_categories(self, service):
         files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.get_content_by_path.return_value = SimpleNamespace(
-            category="Uncategorized"
-        )
+        service.db_service.find_items.return_value = [
+            SimpleNamespace(path="/a.jpg", category="Uncategorized"),
+            SimpleNamespace(path="/b.pdf", category="Uncategorized"),
+        ]
         assert service.apply_filter_to_list(files, FilterType.ALL_FILES) == files
         assert service.apply_filter_to_list(files, FilterType.UNCATEGORIZED) == files
 
@@ -171,52 +173,119 @@ class TestFileOperationService:
 
     def test_apply_multi_filters_to_list(self, service):
         files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.get_content_by_path.side_effect = [
-            SimpleNamespace(
-                category="Work",
-                year_taken=2020,
-                date_created=None,
-                date_modified=None,
-                date_indexed=None,
-                content_metadata=None,
-            ),
-            SimpleNamespace(
-                category="Personal",
-                year_taken=None,
-                date_created=SimpleNamespace(year=2021),
-                date_modified=None,
-                date_indexed=None,
-                content_metadata=None,
-            ),
+        service.db_service.find_items.side_effect = [
+            [
+                SimpleNamespace(
+                    path="/a.jpg",
+                    category="Work",
+                    year_taken=2020,
+                    date_created=None,
+                    date_modified=None,
+                    date_indexed=None,
+                    content_metadata=None,
+                ),
+                SimpleNamespace(
+                    path="/b.pdf",
+                    category="Personal",
+                    year_taken=None,
+                    date_created=SimpleNamespace(year=2021),
+                    date_modified=None,
+                    date_indexed=None,
+                    content_metadata=None,
+                ),
+            ],
+            [
+                SimpleNamespace(
+                    path="/a.jpg",
+                    category="X",
+                    year_taken=2020,
+                    date_created=None,
+                    date_modified=None,
+                    date_indexed=None,
+                    content_metadata=None,
+                ),
+                SimpleNamespace(
+                    path="/b.pdf",
+                    category="Y",
+                    year_taken=None,
+                    date_created=SimpleNamespace(year=2021),
+                    date_modified=None,
+                    date_indexed=None,
+                    content_metadata=None,
+                ),
+            ],
         ]
         assert service.apply_multi_category_filter_to_list(files, ["Work"]) == [
             ("/a.jpg", "/")
         ]
 
-        service.db_service.get_content_by_path.side_effect = [
-            SimpleNamespace(
-                category="X",
-                year_taken=2020,
-                date_created=None,
-                date_modified=None,
-                date_indexed=None,
-                content_metadata=None,
-            ),
-            SimpleNamespace(
-                category="Y",
-                year_taken=None,
-                date_created=SimpleNamespace(year=2021),
-                date_modified=None,
-                date_indexed=None,
-                content_metadata=None,
-            ),
-        ]
         assert service.apply_multi_year_filter_to_list(files, [2021]) == [
             ("/b.pdf", "/")
         ]
         assert service.apply_multi_extension_filter_to_list(files, ["jpg"]) == [
             ("/a.jpg", "/")
         ]
+
+    def test_apply_multi_category_filter_reuses_refresh_snapshot_cache(self, service):
+        files = [("/a.jpg", "/"), ("/b.jpg", "/")]
+        service._current_content_by_path = {
+            "/a.jpg": SimpleNamespace(path="/a.jpg", category="Work"),
+            "/b.jpg": SimpleNamespace(path="/b.jpg", category="Personal"),
+        }
+
+        result = service.apply_multi_category_filter_to_list(files, ["Work"])
+
+        assert result == [("/a.jpg", "/")]
+        service.db_service.find_items.assert_not_called()
+
+    def test_get_content_items_by_path_batches_large_inputs(self, service):
+        files = [(f"/tmp/{idx}.txt", "/tmp") for idx in range(1205)]
+        service.db_service.find_items.side_effect = [
+            [SimpleNamespace(path="/tmp/0.txt", category="A")],
+            [SimpleNamespace(path="/tmp/801.txt", category="B")],
+        ]
+
+        result = service._get_content_items_by_path(files, batch_size=800)
+
+        assert result["/tmp/0.txt"].category == "A"
+        assert result["/tmp/801.txt"].category == "B"
+        assert service.db_service.find_items.call_count == 2
+        for call in service.db_service.find_items.call_args_list:
+            assert call.kwargs["eager_load"] is False
+
+    def test_apply_multi_year_filter_to_list_with_metadata_and_mtime_fallback(
+        self, service
+    ):
+        files = [("/a.jpg", "/"), ("/b.pdf", "/")]
+        service.db_service.find_items.return_value = [
+            SimpleNamespace(
+                category="Work",
+                path="/a.jpg",
+                year_taken=None,
+                date_created=None,
+                date_modified=None,
+                date_indexed=None,
+                content_metadata={"DateTimeOriginal": "2021:05:04 12:00:00"},
+            ),
+            SimpleNamespace(
+                category="Personal",
+                path="/b.pdf",
+                year_taken=None,
+                date_created=None,
+                date_modified=None,
+                date_indexed=None,
+                content_metadata=None,
+            ),
+        ]
+
+        with patch(
+            "ai_content_classifier.services.file.file_operation_service.os.path.getmtime",
+            return_value=1640995200,  # 2022-01-01 UTC
+        ):
+            assert service.apply_multi_year_filter_to_list(files, [2021, 2022]) == [
+                ("/a.jpg", "/"),
+                ("/b.pdf", "/"),
+            ]
 
     def test_private_filters_and_utilities(self, service):
         service.db_service.find_items.return_value = [

@@ -108,14 +108,14 @@ class HeaderSection(ThemedWidget):
             self.logger.error(f"Error applying header theme: {e}")
 
     def set_title(self, title: str):
-        """Update le titre."""
+        """Update the title."""
         self.title_text = title
         title_text = f"{self.icon_text} {title}" if self.icon_text else title
         if hasattr(self, "title_label"):
             self.title_label.setText(title_text)
 
     def set_description(self, description: str):
-        """Update la description."""
+        """Update the description."""
         self.description_text = description
         if hasattr(self, "description_label"):
             self.description_label.setText(description)

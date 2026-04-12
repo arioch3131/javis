@@ -1,3 +1,11 @@
+"""
+Thumbnail item widget used by the virtualized grid.
+
+This module provides `OptimizedThumbnailItem`, a compact and fast widget that
+renders image thumbnails or document placeholders and emits interaction signals
+for selection, activation, and hover preview.
+"""
+
 import os
 from typing import Optional
 
@@ -10,7 +18,7 @@ from ai_content_classifier.services.theme.theme_service import get_theme_service
 
 
 class OptimizedThumbnailItem(QLabel):
-    """Ultra-optimized thumbnail widget."""
+    """Lightweight thumbnail tile for high-density grid rendering."""
 
     clicked = pyqtSignal(str)
     activated = pyqtSignal(str)
@@ -28,9 +36,11 @@ class OptimizedThumbnailItem(QLabel):
         self.setup_optimized_ui()
 
     def _theme_tokens(self):
+        """Return active theme definition used to build styles and sizes."""
         return get_theme_service().get_theme_definition()
 
     def _build_default_style(self) -> str:
+        """Build stylesheet for standard thumbnail tiles."""
         theme = self._theme_tokens()
         palette = theme.palette
         metrics = theme.metrics
@@ -52,6 +62,7 @@ class OptimizedThumbnailItem(QLabel):
         """
 
     def _build_document_style(self) -> str:
+        """Build stylesheet for document placeholder tiles."""
         theme = self._theme_tokens()
         palette = theme.palette
         metrics = theme.metrics
@@ -74,7 +85,7 @@ class OptimizedThumbnailItem(QLabel):
         """
 
     def setup_optimized_ui(self):
-        """Configures the optimized UI."""
+        """Configure base visual and sizing behavior for the tile."""
         self.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.setWordWrap(False)
         self.setFrameStyle(QFrame.Shape.Box)
@@ -85,8 +96,8 @@ class OptimizedThumbnailItem(QLabel):
     def configure_for_file(
         self, file_path: str, directory: str, content_type: str, category: str = ""
     ):
-        """Quickly configures for a file."""
-        # FIX: Clear previous state
+        """Bind tile metadata for a file and reset visual state."""
+        # Clear previous state.
         self.clear()
         self.setPixmap(QPixmap())  # Clear any existing pixmap
 
@@ -97,7 +108,7 @@ class OptimizedThumbnailItem(QLabel):
         self._is_document_placeholder = False
         self.setText(self._elide_filename(os.path.basename(file_path)))
 
-        # Reset style to default
+        # Reset style to default.
         self.setStyleSheet(self._build_default_style())
 
         self.show()
@@ -133,7 +144,7 @@ class OptimizedThumbnailItem(QLabel):
             self.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
 
     def set_thumbnail_size(self, size: int):
-        """Quickly adjusts size."""
+        """Update tile geometry from a requested thumbnail size."""
         self.thumbnail_size_px = max(50, min(300, int(size)))
         metrics = self._theme_tokens().metrics
         tile_w = self.thumbnail_size_px + metrics.spacing_sm + 2
@@ -144,7 +155,7 @@ class OptimizedThumbnailItem(QLabel):
             self.setText(self._elide_filename(os.path.basename(self.file_path)))
 
     def clear_file(self):
-        """Quickly clears."""
+        """Clear bound file metadata and current visual content."""
         self.file_path = None
         self.directory = ""
         self.category = ""
@@ -154,28 +165,34 @@ class OptimizedThumbnailItem(QLabel):
         self.setText("")
 
     def mousePressEvent(self, event):
+        """Emit click signal on left press, then delegate to QLabel."""
         if event.button() == Qt.MouseButton.LeftButton and self.file_path:
             self.clicked.emit(self.file_path)
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
+        """Emit activation signal on left double-click, then delegate."""
         if event.button() == Qt.MouseButton.LeftButton and self.file_path:
             self.activated.emit(self.file_path)
         super().mouseDoubleClickEvent(event)
 
     def enterEvent(self, event):
+        """Emit hover preview payload when pointer enters the tile."""
         super().enterEvent(event)
         if self.file_path:
             self.hover_started.emit(self._build_preview_payload(), self._hover_anchor())
 
     def leaveEvent(self, event):
+        """Notify hover end when pointer leaves the tile."""
         super().leaveEvent(event)
         self.hover_ended.emit()
 
     def _hover_anchor(self) -> QPoint:
+        """Return global anchor point used to place hover preview UI."""
         return self.mapToGlobal(self.rect().topRight())
 
     def _build_preview_payload(self) -> dict[str, object]:
+        """Build structured metadata payload consumed by hover preview."""
         return {
             "file_path": self.file_path,
             "directory": self.directory,

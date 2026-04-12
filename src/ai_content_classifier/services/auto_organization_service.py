@@ -1,9 +1,9 @@
 # services/auto_organization_service.py
 """
-Auto Organization Service - Service pour automatically organize les files.
+Auto Organization Service - Service for automatically organizing files.
 
-Pure service containing only la business logic d'organisation des files.
-Independent de l'user interface et des Qt signals.
+Pure service containing only business organization logic.
+Independent from the user interface and Qt signals.
 """
 
 import os
@@ -18,7 +18,7 @@ from ai_content_classifier.core.logger import LoggableMixin
 
 @dataclass
 class OrganizationResult:
-    """Result of an operation d'organisation."""
+    """Result of an organization operation."""
 
     success: bool
     source_path: str
@@ -30,7 +30,7 @@ class OrganizationResult:
 
 @dataclass
 class OrganizationConfig:
-    """Configuration pour l'organisation des files."""
+    """Configuration for file organization."""
 
     target_directory: str
     organization_structure: str
@@ -40,8 +40,8 @@ class OrganizationConfig:
 
 class AutoOrganizationService(LoggableMixin):
     """
-    Service pur pour automatically organize les files selon diverses structures.
-    Independent de l'user interface.
+    Pure service for organizing files according to multiple structures.
+    Independent from the user interface.
     """
 
     def __init__(self, content_database_service):
@@ -60,29 +60,29 @@ class AutoOrganizationService(LoggableMixin):
 
     def validate_config(self, config: OrganizationConfig) -> Tuple[bool, Optional[str]]:
         """
-        Valide la configuration d'organisation.
+        Validate organization configuration.
 
         Returns:
             Tuple[bool, Optional[str]]: (is_valid, error_message)
         """
         try:
-            # Check le folder cible
+            # Check target folder
             if not config.target_directory:
                 return False, "No target directory specified"
 
-            # Check que le parent du folder cible existe
+            # Check that the target folder parent exists
             parent_dir = os.path.dirname(config.target_directory)
             if parent_dir and not os.path.exists(parent_dir):
                 return False, f"Parent directory does not exist: {parent_dir}"
 
-            # Check la structure
+            # Check structure
             if config.organization_structure not in self.structure_handlers:
                 return (
                     False,
                     f"Unsupported organization structure: {config.organization_structure}",
                 )
 
-            # Check l'action
+            # Check action
             if config.organization_action not in ["copy", "move"]:
                 return (
                     False,
@@ -98,11 +98,11 @@ class AutoOrganizationService(LoggableMixin):
     def prepare_target_structure(self, config: OrganizationConfig) -> bool:
         """Prepare target folder structure."""
         try:
-            # Create le folder racine
+            # Create root target folder
             os.makedirs(config.target_directory, exist_ok=True)
             self.logger.info(f"Target directory prepared: {config.target_directory}")
 
-            # Pre-create la structure selon le type
+            # Pre-create structure depending on selected type
             if config.organization_structure == "By Category":
                 categories = self._get_available_categories()
                 for category in categories:
@@ -118,13 +118,13 @@ class AutoOrganizationService(LoggableMixin):
                     os.makedirs(type_dir, exist_ok=True)
 
             elif config.organization_structure == "By Year":
-                # Create folders pour les recent years
+                # Create folders for recent years
                 current_year = datetime.now().year
                 for year in range(current_year - 10, current_year + 1):
                     year_dir = os.path.join(config.target_directory, str(year))
                     os.makedirs(year_dir, exist_ok=True)
 
-            # Les structures mixtes will be created dynamically
+            # Mixed structures will be created dynamically
             return True
 
         except Exception as e:
@@ -135,11 +135,11 @@ class AutoOrganizationService(LoggableMixin):
         self, file_path: str, config: OrganizationConfig
     ) -> OrganizationResult:
         """
-        Organize un seul file selon la configuration.
+        Organize a single file based on configuration.
 
         Args:
             file_path: Path to the file to organize
-            config: Configuration d'organisation
+            config: Organization configuration
 
         Returns:
             OrganizationResult: Operation result
@@ -201,13 +201,13 @@ class AutoOrganizationService(LoggableMixin):
     def _organize_by_category(
         self, file_path: str, config: OrganizationConfig
     ) -> OrganizationResult:
-        """Organize un file par category."""
+        """Organize a file by category."""
         try:
-            # Retrieve la category du file
+            # Retrieve file category
             content_item = self._safe_get_content_item(file_path)
             category = self._extract_category(content_item)
 
-            # Construire le chemin cible
+            # Build target path
             category_dir = os.path.join(
                 config.target_directory, self._sanitize_dirname(category)
             )
@@ -216,10 +216,10 @@ class AutoOrganizationService(LoggableMixin):
             filename = os.path.basename(file_path)
             target_path = os.path.join(category_dir, filename)
 
-            # Handle les name conflicts
+            # Handle name conflicts
             target_path = self._resolve_name_conflict(target_path)
 
-            # Effectuer l'action
+            # Perform action
             return self._perform_file_action(
                 file_path, target_path, config.organization_action
             )
@@ -237,23 +237,23 @@ class AutoOrganizationService(LoggableMixin):
     def _organize_by_year(
         self, file_path: str, config: OrganizationConfig
     ) -> OrganizationResult:
-        """Organize un file par year."""
+        """Organize a file by year."""
         try:
-            # Retrieve l'year du file
+            # Retrieve file year
             content_item = self._safe_get_content_item(file_path)
             year = self._extract_year(file_path, content_item)
 
-            # Construire le chemin cible
+            # Build target path
             year_dir = os.path.join(config.target_directory, str(year))
             os.makedirs(year_dir, exist_ok=True)
 
             filename = os.path.basename(file_path)
             target_path = os.path.join(year_dir, filename)
 
-            # Handle les name conflicts
+            # Handle name conflicts
             target_path = self._resolve_name_conflict(target_path)
 
-            # Effectuer l'action
+            # Perform action
             return self._perform_file_action(
                 file_path, target_path, config.organization_action
             )
@@ -271,22 +271,22 @@ class AutoOrganizationService(LoggableMixin):
     def _organize_by_type(
         self, file_path: str, config: OrganizationConfig
     ) -> OrganizationResult:
-        """Organize un file par type."""
+        """Organize a file by type."""
         try:
-            # Determine le file type
+            # Determine file type
             file_type = self.determine_file_type(file_path)
 
-            # Construire le chemin cible
+            # Build target path
             type_dir = os.path.join(config.target_directory, file_type)
             os.makedirs(type_dir, exist_ok=True)
 
             filename = os.path.basename(file_path)
             target_path = os.path.join(type_dir, filename)
 
-            # Handle les name conflicts
+            # Handle name conflicts
             target_path = self._resolve_name_conflict(target_path)
 
-            # Effectuer l'action
+            # Perform action
             return self._perform_file_action(
                 file_path, target_path, config.organization_action
             )
@@ -304,14 +304,14 @@ class AutoOrganizationService(LoggableMixin):
     def _organize_by_category_year(
         self, file_path: str, config: OrganizationConfig
     ) -> OrganizationResult:
-        """Organize un file par category puis year."""
+        """Organize a file by category then year."""
         try:
-            # Retrieve category et year
+            # Retrieve category and year
             content_item = self._safe_get_content_item(file_path)
             category = self._extract_category(content_item)
             year = self._extract_year(file_path, content_item)
 
-            # Construire le chemin cible
+            # Build target path
             category_dir = os.path.join(
                 config.target_directory, self._sanitize_dirname(category)
             )
@@ -321,10 +321,10 @@ class AutoOrganizationService(LoggableMixin):
             filename = os.path.basename(file_path)
             target_path = os.path.join(year_dir, filename)
 
-            # Handle les name conflicts
+            # Handle name conflicts
             target_path = self._resolve_name_conflict(target_path)
 
-            # Effectuer l'action
+            # Perform action
             return self._perform_file_action(
                 file_path, target_path, config.organization_action
             )
@@ -342,14 +342,14 @@ class AutoOrganizationService(LoggableMixin):
     def _organize_by_type_category(
         self, file_path: str, config: OrganizationConfig
     ) -> OrganizationResult:
-        """Organize un file par type puis category."""
+        """Organize a file by type then category."""
         try:
-            # Determine type et category
+            # Determine type and category
             file_type = self.determine_file_type(file_path)
             content_item = self._safe_get_content_item(file_path)
             category = self._extract_category(content_item)
 
-            # Construire le chemin cible
+            # Build target path
             type_dir = os.path.join(config.target_directory, file_type)
             category_dir = os.path.join(type_dir, self._sanitize_dirname(category))
             os.makedirs(category_dir, exist_ok=True)
@@ -357,10 +357,10 @@ class AutoOrganizationService(LoggableMixin):
             filename = os.path.basename(file_path)
             target_path = os.path.join(category_dir, filename)
 
-            # Handle les name conflicts
+            # Handle name conflicts
             target_path = self._resolve_name_conflict(target_path)
 
-            # Effectuer l'action
+            # Perform action
             return self._perform_file_action(
                 file_path, target_path, config.organization_action
             )
@@ -378,10 +378,10 @@ class AutoOrganizationService(LoggableMixin):
     def _organize_custom(
         self, file_path: str, config: OrganizationConfig
     ) -> OrganizationResult:
-        """Organize un file selon une structure custom."""
+        """Organize a file using a custom structure."""
         try:
-            # TODO: Implement la logic custom
-            # Pour l'instant, fallback sur category
+            # TODO: Implement custom logic
+            # For now, fallback to category
             return self._organize_by_category(file_path, config)
 
         except Exception as e:
@@ -399,7 +399,7 @@ class AutoOrganizationService(LoggableMixin):
     ) -> OrganizationResult:
         """Perform action on file (copy or move)."""
         try:
-            # Check que la source existe
+            # Check source exists
             if not os.path.exists(source_path):
                 return OrganizationResult(
                     success=False,
@@ -409,10 +409,10 @@ class AutoOrganizationService(LoggableMixin):
                     error_message="Source file does not exist",
                 )
 
-            # Obtenir la taille du file
+            # Get file size
             file_size = os.path.getsize(source_path)
 
-            # Effectuer l'action
+            # Perform action
             if action == "copy":
                 shutil.copy2(source_path, target_path)  # copy2 preserves metadata
                 self.logger.debug(f"File copied: {source_path} -> {target_path}")
@@ -458,7 +458,7 @@ class AutoOrganizationService(LoggableMixin):
         """Determine file type."""
         ext = os.path.splitext(file_path)[1].lower()
 
-        # Extensions pour documents
+        # Document extensions
         if ext in {
             ".pdf",
             ".doc",
@@ -475,7 +475,7 @@ class AutoOrganizationService(LoggableMixin):
         }:
             return "Documents"
 
-        # Extensions pour images
+        # Image extensions
         elif ext in {
             ".jpg",
             ".jpeg",
@@ -506,7 +506,7 @@ class AutoOrganizationService(LoggableMixin):
         }:
             return "Videos"
 
-        # Extensions pour audio
+        # Audio extensions
         elif ext in {
             ".mp3",
             ".wav",
@@ -524,7 +524,7 @@ class AutoOrganizationService(LoggableMixin):
             return "Others"
 
     def _get_available_categories(self) -> List[str]:
-        """Get available categories dans la database."""
+        """Get available categories from the database."""
         try:
             categories = self.db_service.get_unique_categories()
             if not categories:
@@ -535,13 +535,13 @@ class AutoOrganizationService(LoggableMixin):
             return ["Work", "Personal", "Archive", "Uncategorized"]
 
     def _sanitize_dirname(self, name: str) -> str:
-        """Nettoie un nom pour l'usesr comme nom de folder."""
+        """Sanitize a value for safe folder-name usage."""
         # Replace problematic characters
         invalid_chars = '<>:"/\\|?*'
         for char in invalid_chars:
             name = name.replace(char, "_")
 
-        # Limiter la longueur
+        # Limit length
         if len(name) > 100:
             name = name[:100]
 
@@ -579,14 +579,14 @@ class AutoOrganizationService(LoggableMixin):
         self, file_list: List[str], config: OrganizationConfig
     ) -> Dict:
         """
-        Generate un preview de l'organisation without performing actions.
+        Generate an organization preview without performing actions.
 
         Args:
-            file_list: Liste des chemins de files
-            config: Configuration d'organisation
+            file_list: List of file paths
+            config: Organization configuration
 
         Returns:
-            dict: Preview de la structure that would be created
+            dict: Preview of the structure that would be created
         """
         try:
             preview = {
@@ -598,7 +598,7 @@ class AutoOrganizationService(LoggableMixin):
 
             for file_path in file_list:
                 try:
-                    # Simuler l'organisation sans effectuer l'action
+                    # Simulate organization without performing action
                     if config.organization_structure == "By Category":
                         content_item = self._safe_get_content_item(file_path)
                         category = self._extract_category(content_item)
@@ -624,7 +624,7 @@ class AutoOrganizationService(LoggableMixin):
                     filename = os.path.basename(file_path)
                     preview["structure"][folder_path].append(filename)
 
-                    # Statistiques
+                    # Statistics
                     preview["file_count"] += 1
                     try:
                         file_size = os.path.getsize(file_path)
@@ -660,24 +660,24 @@ class AutoOrganizationService(LoggableMixin):
         Calculate statistics for an organization operation.
 
         Args:
-            results: Liste des results d'organisation
+            results: List of organization results
             config: Configuration used
 
         Returns:
             dict: Detailed statistics
         """
         try:
-            # Calculer les statistiques
+            # Calculate statistics
             total_files = len(results)
             successful = sum(1 for r in results if r.success)
             failed = total_files - successful
             total_size = sum(r.size_bytes for r in results if r.success)
 
-            # Statistiques par action
+            # Statistics by action
             copied = sum(1 for r in results if r.success and r.action == "copy")
             moved = sum(1 for r in results if r.success and r.action == "move")
 
-            # Statistiques par type de file
+            # Statistics by file type
             type_stats = {}
             for result in results:
                 if result.success:

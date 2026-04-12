@@ -1041,6 +1041,9 @@ class CategorizationController(QObject):
         total = results["total_processed"]
         successful = results["successful"]
         failed = results["failed"]
+        total_denominator = max(total, 1)
+        success_rate = successful / total_denominator * 100
+        failure_rate = failed / total_denominator * 100
 
         # Calculate statistics
         if results["results"]:
@@ -1066,8 +1069,8 @@ class CategorizationController(QObject):
 
 📈 Global Statistics:
 • Total processed: {total} files
-• Successful: {successful} ({successful / total * 100:.1f}%)
-• Failures: {failed} ({failed / total * 100:.1f}%)
+• Successful: {successful} ({success_rate:.1f}%)
+• Failures: {failed} ({failure_rate:.1f}%)
 • Average confidence: {avg_confidence:.1%}
 • Average time: {avg_time:.1f}s per file
 

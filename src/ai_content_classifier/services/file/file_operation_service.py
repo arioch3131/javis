@@ -12,6 +12,8 @@ ENHANCED VERSION: Now supports multi-selection filters and centralized file type
 
 import os
 import re
+import shutil
+import sys
 
 from dataclasses import dataclass
 from enum import Enum
@@ -24,6 +26,7 @@ from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
     ContentFilter,
 )
+from ai_content_classifier.models.content_models import ContentItem
 from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
 from ai_content_classifier.services.thumbnail.thumbnail_service import ThumbnailService
@@ -149,6 +152,7 @@ class FileOperationService(LoggableMixin):
         self._current_files: List[
             Tuple[str, str]
         ] = []  # Stores (file_path, directory) tuples.
+        self._current_content_by_path: Dict[str, Any] = {}
         self._current_filter: FilterType = FilterType.ALL_FILES
         self._last_scan_stats = ScanStatistics()
 
@@ -218,6 +222,7 @@ class FileOperationService(LoggableMixin):
 
             # Update internal state with the new list of files.
             self._current_files = file_list
+            self._current_content_by_path = {}
             self._last_scan_stats.files_found = len(file_list)
 
             # Notify registered callbacks about the completion and updates.
@@ -349,9 +354,11 @@ class FileOperationService(LoggableMixin):
 
             # Convert retrieved content items into the expected (file_path, directory) format.
             file_list = []
+            content_by_path: Dict[str, Any] = {}
             for item in all_content:
                 if hasattr(item, "path") and hasattr(item, "directory"):
                     file_list.append((item.path, item.directory))
+                    content_by_path[item.path] = item
                 else:
                     self.logger.warning(
                         f"Skipping item due to missing path or directory attributes: {item}."
@@ -366,6 +373,7 @@ class FileOperationService(LoggableMixin):
 
             # Update the service's internal list of files.
             self._current_files = file_list
+            self._current_content_by_path = content_by_path
 
             # Notify the callback that the file list has been updated.
             if self._on_files_updated:
@@ -386,7 +394,44 @@ class FileOperationService(LoggableMixin):
         Clears the in-memory file list managed by the service.
         """
         self._current_files = []
+        self._current_content_by_path = {}
         self._current_filter = FilterType.ALL_FILES
+
+    @staticmethod
+    def _resolve_thumbnail_cache_dir() -> str:
+        """Return the centralized, user-writable thumbnail cache directory."""
+        app_folder = "Javis"
+        if sys.platform.startswith("win"):
+            base_dir = os.getenv(
+                "LOCALAPPDATA",
+                os.getenv("APPDATA", str(os.path.expanduser("~\\AppData\\Local"))),
+            )
+        elif sys.platform == "darwin":
+            base_dir = os.path.expanduser("~/Library/Caches")
+        else:
+            base_dir = os.getenv("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
+
+        return os.path.normpath(
+            os.path.abspath(os.path.join(base_dir, app_folder, "thumbnails"))
+        )
+
+    def clear_thumbnail_disk_cache(self) -> None:
+        """Remove all generated thumbnail files from disk cache."""
+        thumbnail_cache_dir = self._resolve_thumbnail_cache_dir()
+        if not os.path.isdir(thumbnail_cache_dir):
+            self.logger.debug(
+                f"Thumbnail disk cache directory does not exist: {thumbnail_cache_dir}"
+            )
+            return
+
+        try:
+            shutil.rmtree(thumbnail_cache_dir)
+            os.makedirs(thumbnail_cache_dir, exist_ok=True)
+            self.logger.info(
+                f"Thumbnail disk cache cleared successfully: {thumbnail_cache_dir}"
+            )
+        except Exception as e:
+            self.logger.warning(f"Unable to clear thumbnail disk cache: {e}")
 
     # === ENHANCED FILTERING SYSTEM ===
 
@@ -490,10 +535,12 @@ class FileOperationService(LoggableMixin):
         if filter_type == FilterType.ALL_FILES:
             return file_list
         elif filter_type == FilterType.UNCATEGORIZED:
+            content_map = self._get_content_items_by_path(file_list)
             return [
                 (path, directory)
                 for path, directory in file_list
-                if self.db_service.get_content_by_path(path).category == "Uncategorized"
+                if content_map.get(path)
+                and content_map[path].category == "Uncategorized"
             ]
         else:
             filtered_files = []
@@ -524,9 +571,10 @@ class FileOperationService(LoggableMixin):
         """
         Applies a multi-category filter to a given list of files.
         """
+        content_map = self._get_content_items_by_path(file_list)
         filtered_files = []
         for file_path, directory in file_list:
-            content_item = self.db_service.get_content_by_path(file_path)
+            content_item = content_map.get(file_path)
             if content_item and content_item.category in categories:
                 filtered_files.append((file_path, directory))
         return filtered_files
@@ -547,9 +595,10 @@ class FileOperationService(LoggableMixin):
         if not normalized_years:
             return []
 
+        content_map = self._get_content_items_by_path(file_list)
         filtered_files = []
         for file_path, directory in file_list:
-            content_item = self.db_service.get_content_by_path(file_path)
+            content_item = content_map.get(file_path)
             if content_item:
                 file_year = None
                 if hasattr(content_item, "year_taken") and content_item.year_taken:
@@ -608,6 +657,46 @@ class FileOperationService(LoggableMixin):
                 if file_year and int(file_year) in normalized_years:
                     filtered_files.append((file_path, directory))
         return filtered_files
+
+    def _get_content_items_by_path(
+        self, file_list: List[Tuple[str, str]], batch_size: int = 800
+    ) -> Dict[str, Any]:
+        """
+        Load content rows for a file list in batches to avoid N+1 queries.
+
+        SQLite has a limit on bound parameters, so we chunk IN clauses.
+        """
+        unique_paths = [path for path, _ in file_list if path]
+        if not unique_paths:
+            return {}
+
+        unique_paths = list(dict.fromkeys(unique_paths))
+        path_to_item: Dict[str, Any] = {}
+
+        # Fast path: rely on refresh snapshot if available.
+        if self._current_content_by_path:
+            missing_paths: List[str] = []
+            for path in unique_paths:
+                cached_item = self._current_content_by_path.get(path)
+                if cached_item is not None:
+                    path_to_item[path] = cached_item
+                else:
+                    missing_paths.append(path)
+            if not missing_paths:
+                return path_to_item
+            unique_paths = missing_paths
+
+        for index in range(0, len(unique_paths), batch_size):
+            batch_paths = unique_paths[index : index + batch_size]
+            batch_items = self.db_service.find_items(
+                custom_filter=[ContentItem.path.in_(batch_paths)],
+                eager_load=False,
+            )
+            for item in batch_items:
+                if hasattr(item, "path"):
+                    path_to_item[item.path] = item
+
+        return path_to_item
 
     def _extract_year_from_value(self, raw_value: Any) -> Optional[int]:
         """Extract a valid year (1900-2100) from arbitrary metadata values."""

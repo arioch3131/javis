@@ -1,4 +1,4 @@
-# views/main_window/main.py - CORRECTIONS DE COMPATIBILITÉ
+# views/main_window/main.py - COMPATIBILITY CORRECTIONS
 """
 MainWindow - refactored main shell with compatibility helpers.
 """
@@ -69,15 +69,16 @@ class MainWindow(QMainWindow, ThemeMixin):
         # Services
         self.content_database_service = content_database_service
 
-        # Builders (remplacent le code de construction complexe)
+        # Builders (replace complex construction code)
         self.ui_builder = UIBuilder(self)
         self.menu_builder = MenuBuilder(self)
 
-        # State de l'interface
+        # UI state
         self.current_view_mode = "grid"
         self.current_files = []
         self._raw_visible_files = []
         self._search_index: list[tuple[tuple, str]] = []
+        self._search_index_ready = False
         self._search_query = ""
         self._pending_search_query = ""
         self._sort_mode = "Name"
@@ -90,7 +91,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._apply_search_query)
 
-        # Configuration initiale
+        # Initial configuration
         self.setup_window()
 
         self.build_interface()
@@ -108,20 +109,15 @@ class MainWindow(QMainWindow, ThemeMixin):
         """Configure the compatibility layer for main_view.py"""
         self.logger.debug("Setting up compatibility layer...")
 
-        # ✅ 1. EXPOSER LES ACTIONS COMME PROPRIÉTÉS
         self._expose_actions_as_properties()
-
-        # ✅ 2. EXPOSER LES WIDGETS CRITIQUES
         self._expose_critical_widgets()
-
-        # ✅ 3. SETUP DES HANDLERS PAR DÉFAUT
         self._setup_default_handlers()
 
         self.logger.debug("Compatibility layer configured")
 
     def _expose_actions_as_properties(self):
         """Expose actions as properties for compatibility."""
-        # Actions principales attendues par main_view.py
+        # Main actions expected by main_view.py
         action_mappings = {
             "scan_action": "scan_advanced",
             "settings_action": "tools_settings",
@@ -137,16 +133,16 @@ class MainWindow(QMainWindow, ThemeMixin):
                 setattr(self, property_name, action)
                 self.logger.debug(f"Exposed action {action_id} as {property_name}")
             else:
-                # Creater une action fallback
+                # Create a fallback action
                 fallback_action = QAction(f"[{property_name}]", self)
                 setattr(self, property_name, fallback_action)
                 self.logger.warning(f"Created fallback action for {property_name}")
 
     def _expose_critical_widgets(self):
         """Expose critical widgets for compatibility."""
-        # S'assurer que les widgets sont accessibles
+        # Ensure critical widgets are reachable
 
-        # Widget de grille de vignettes
+        # Thumbnail grid widget
         if not hasattr(self, "thumbnail_grid_widget"):
             self.thumbnail_grid_widget = self.ui_builder.get_widget(
                 "thumbnail_grid_widget"
@@ -154,17 +150,17 @@ class MainWindow(QMainWindow, ThemeMixin):
             if not self.thumbnail_grid_widget:
                 self.logger.warning("thumbnail_grid_widget not found in ui_builder")
 
-        # Widget de liste de files
+        # File list widget
         if not hasattr(self, "file_list_widget"):
             self.file_list_widget = self.ui_builder.get_widget("file_list_widget")
             if not self.file_list_widget:
                 self.logger.warning("file_list_widget not found in ui_builder")
 
-        # Widget de colonnes
+        # Columns widget
         if not hasattr(self, "columns_widget"):
             self.columns_widget = self.ui_builder.get_widget("columns_widget")
 
-        # Widget de preview adaptative
+        # Adaptive preview widget
         if not hasattr(self, "adaptive_preview_widget"):
             self.adaptive_preview_widget = self.ui_builder.get_widget(
                 "adaptive_preview_widget"
@@ -199,7 +195,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         if not hasattr(self, "handle_auto_organize_request"):
             self.handle_auto_organize_request = self._default_organize_handler
 
-        # ✅ NOUVEAUX HANDLERS MANQUANTS
+        # Missing handlers
         if not hasattr(self, "handle_refresh_request"):
             self.handle_refresh_request = self._default_refresh_handler
 
@@ -257,13 +253,13 @@ class MainWindow(QMainWindow, ThemeMixin):
         else:
             self.showFullScreen()
 
-    # ✅ MÉTHODES DE COMPATIBILITÉ MANQUANTES
+    # Missing compatibility methods
 
     def set_thumbnail_generator(self, generator_func):
         """Configure thumbnail generator."""
         self.logger.debug("Thumbnail generator configured")
 
-        # Appliquer au widget de grille si disponible
+        # Apply to grid widget when available
         if hasattr(self, "thumbnail_grid_widget") and self.thumbnail_grid_widget:
             if hasattr(self.thumbnail_grid_widget, "set_thumbnail_generator"):
                 self.thumbnail_grid_widget.set_thumbnail_generator(generator_func)
@@ -272,7 +268,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         """Configure metadata generator."""
         self.logger.debug("Metadata generator configured")
 
-        # Appliquer aux widgets si disponible
+        # Apply to widgets when available
         widgets_to_update = [
             getattr(self, "thumbnail_grid_widget", None),
             getattr(self, "file_list_widget", None),
@@ -283,14 +279,14 @@ class MainWindow(QMainWindow, ThemeMixin):
             if widget and hasattr(widget, "set_metadata_generator"):
                 widget.set_metadata_generator(generator_func)
 
-    # ✅ MÉTHODES UIBuilder EXPOSÉES
+    # Exposed UIBuilder methods
 
     def get_widget(self, widget_name: str):
-        """Return un widget du UIBuilder."""
+        """Return a widget from UIBuilder."""
         return self.ui_builder.get_widget(widget_name)
 
     def get_action(self, action_id: str):
-        """Return une action du MenuBuilder."""
+        """Return an action from MenuBuilder."""
         return self.menu_builder.get_action(action_id)
 
     def enable_action(self, action_id: str, enabled: bool = True):
@@ -301,7 +297,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         """Check/uncheck an action."""
         self.menu_builder.check_action(action_id, checked)
 
-    # ✅ SETUP WINDOW AND BUILD INTERFACE (unchanged)
+    # Setup window and build interface (unchanged)
     def setup_window(self):
         """Base window configuration."""
         self.setWindowTitle("Javis")
@@ -339,19 +335,19 @@ class MainWindow(QMainWindow, ThemeMixin):
             self._screen_fit_applied = True
 
     def build_interface(self):
-        """Construit l'interface via les builders."""
+        """Build the interface via builders."""
         try:
-            # 1. Interface principale (widgets, layouts, docks)
+            # 1. Main interface (widgets, layouts, docks)
             self.ui_builder.build_main_interface()
 
-            # 2. Menus et toolbars
+            # 2. Menus and toolbars
             self.menu_builder.create_menus_and_toolbars()
             for toolbar_name in ("main", "view", "scan"):
                 toolbar = self.menu_builder.toolbars.get(toolbar_name)
                 if toolbar:
                     toolbar.hide()
 
-            # 3. Connexions finales
+            # 3. Final connections
             self.connect_builder_signals()
 
         except Exception as e:
@@ -370,13 +366,13 @@ class MainWindow(QMainWindow, ThemeMixin):
         self.ui_builder.apply_responsive_layout(self.width(), self.height())
 
     def connect_builder_signals(self):
-        """Connect les signaux entre builders et MainWindow."""
+        """Connect signals between builders and MainWindow."""
         try:
             self.logger.debug("Connecting builder signals...")
 
-            # === GESTION DES MODES D'AFFICHAGE ===
+            # === VIEW MODE HANDLING ===
 
-            # 1. Essayer d'abord le button group de UIBuilder (boutons toolbar)
+            # 1. First try UIBuilder button group (toolbar buttons)
             if hasattr(self, "view_mode_button_group") and self.view_mode_button_group:
                 if hasattr(self.view_mode_button_group, "idClicked"):
                     self.view_mode_button_group.idClicked.connect(
@@ -390,7 +386,7 @@ class MainWindow(QMainWindow, ThemeMixin):
                     self.view_mode_group.triggered.connect(self._on_view_mode_triggered)
                     self.logger.debug("Connectd MenuBuilder action group")
 
-            # === AUTRES SIGNAUX ===
+            # === OTHER SIGNALS ===
             if hasattr(self, "active_filters_bar") and self.active_filters_bar:
                 if hasattr(self.active_filters_bar, "filters_changed"):
                     self.active_filters_bar.filters_changed.connect(
@@ -405,9 +401,9 @@ class MainWindow(QMainWindow, ThemeMixin):
             # Do not raise exception to allow startup
 
     def _on_view_mode_triggered(self, action):
-        """✅ CORRECTION: Handler pour QActionGroup triggered signal."""
+        """Compatibility handler for QActionGroup triggered signal."""
         try:
-            # Mapping des actions vers les modes
+            # Map actions to view modes
             action_to_mode = {
                 "view_grid": "grid",
                 "view_list": "list",
@@ -424,7 +420,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             # Update current mode
             self.current_view_mode = mode
 
-            # Émettre le signal avec le nom du mode
+            # Emit signal with mode name
             self.view_mode_changed.emit(mode)
 
             # Update stacked widget if available
@@ -440,14 +436,14 @@ class MainWindow(QMainWindow, ThemeMixin):
             self.logger.error(f"Error in _on_view_mode_triggered: {e}")
 
     def _on_view_mode_changed(self, mode_id: int):
-        """Handler pour changement de mode d'affichage."""
+        """Handle view mode changes."""
         mode_names = ["grid", "list", "columns"]
         if 0 <= mode_id < len(mode_names):
             self.current_view_mode = mode_names[mode_id]
             self.view_mode_changed.emit(self.current_view_mode)
 
     def _on_active_filters_changed(self, filters: dict):
-        """Handler pour changement des filtres actifs."""
+        """Handle active filters changes."""
         self.active_filters_changed.emit(filters)
 
     def _default_scan_handler(self):
@@ -479,7 +475,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         self.logger.debug("Default organize handler called")
 
     def _on_view_mode_button_clicked(self, button_id: int):
-        """Handler pour les boutons de vue (QButtonGroup)."""
+        """Handle view buttons (QButtonGroup)."""
         try:
             mode_names = ["grid", "list", "columns"]
             if 0 <= button_id < len(mode_names):
@@ -497,7 +493,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         except Exception as e:
             self.logger.error(f"Error in _on_view_mode_button_clicked: {e}")
 
-    # ✅ TOUTES LES AUTRES MÉTHODES RESTENT IDENTIQUES...
+    # All remaining methods stay identical...
     # (apply_main_theme, set_file_data, set_categorization_enabled, etc.)
 
     def apply_main_theme(self, palette):
@@ -790,15 +786,13 @@ class MainWindow(QMainWindow, ThemeMixin):
         except Exception as e:
             self.logger.error(f"Error applying main theme: {e}")
 
-    # === INTERFACE DE COMPATIBILITÉ ===
+    # === COMPATIBILITY INTERFACE ===
     def set_file_data(self, file_data):
         """Compatibility interface to update files."""
         self._has_received_file_data = True
         self._raw_visible_files = list(file_data)
-        self._search_index = [
-            (file_row, self._build_search_haystack(file_row))
-            for file_row in self._raw_visible_files
-        ]
+        self._search_index = []
+        self._search_index_ready = False
         self._refresh_displayed_files()
 
     def set_search_query(self, search_query: str):
@@ -816,6 +810,7 @@ class MainWindow(QMainWindow, ThemeMixin):
     def _refresh_displayed_files(self):
         query_tokens = self._tokenize_search_query(self._search_query)
         if query_tokens:
+            self._ensure_search_index()
             filtered_files = [
                 file_row
                 for file_row, haystack in self._search_index
@@ -855,6 +850,16 @@ class MainWindow(QMainWindow, ThemeMixin):
                     )
 
         self._update_file_statistics(filtered_files)
+
+    def _ensure_search_index(self) -> None:
+        """Build normalized search index lazily to keep initial loads fast."""
+        if self._search_index_ready:
+            return
+        self._search_index = [
+            (file_row, self._build_search_haystack(file_row))
+            for file_row in self._raw_visible_files
+        ]
+        self._search_index_ready = True
 
     def _matches_search(self, file_row, search_query: str) -> bool:
         if not search_query:
@@ -933,7 +938,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             return 0.0
 
     def _update_columns_widget(self, file_data):
-        """Update le widget en colonnes."""
+        """Update the columns widget."""
         if not hasattr(self, "columns_widget") or not self.columns_widget:
             return
 
@@ -1006,7 +1011,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         return duplicates_by_path
 
     def _format_file_size(self, file_path: str) -> str:
-        """Formate la taille d'un file."""
+        """Format file size."""
         try:
             size = self._get_file_size_bytes(file_path)
 
@@ -1019,7 +1024,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             return "Unknown"
 
     def _get_file_size_bytes(self, file_path: str) -> int:
-        """Return la taille d'un file en bytes."""
+        """Return file size in bytes."""
         try:
             import os
 
@@ -1028,7 +1033,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             return 0
 
     def _format_file_date(self, file_path: str) -> str:
-        """Formate la date d'un file."""
+        """Format file date."""
         try:
             import datetime
             import os
@@ -1040,7 +1045,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             return "Unknown"
 
     def _update_file_statistics(self, file_data):
-        """Update les statistiques de files."""
+        """Update file statistics."""
         count = len(file_data)
 
         if hasattr(self, "files_status_label"):
@@ -1074,7 +1079,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             self.size_total_label.setText(self._format_size_bytes(total_size_bytes))
 
     def _format_size_bytes(self, size_bytes: int) -> str:
-        """Formate une taille en bytes en texte lisible."""
+        """Format bytes to a human-readable string."""
         size = float(max(0, size_bytes))
         for unit in ["B", "KB", "MB", "GB"]:
             if size < 1024.0:
@@ -1094,7 +1099,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             organize_button.setEnabled(enabled)
 
     def set_connection_status(self, is_connected: bool, message: str):
-        """Update le statut de connexion LLM."""
+        """Update LLM connection status."""
         if hasattr(self, "llm_status_label"):
             status = "LLM online" if is_connected else "LLM offline"
             tone = "success" if is_connected else "neutral"
@@ -1103,7 +1108,7 @@ class MainWindow(QMainWindow, ThemeMixin):
             )
 
     def set_main_status_chip(self, status_message: str, is_busy: bool = False):
-        """Update l'etat principal du shell."""
+        """Update main shell status."""
         normalized = status_message.strip()
         lowered = normalized.lower()
 
@@ -1128,7 +1133,7 @@ class MainWindow(QMainWindow, ThemeMixin):
         )
 
     def set_progress_status_chip(self, status_message: str, is_busy: bool = False):
-        """Update le statut de progression affiche dans la barre basse."""
+        """Update progress status shown in the bottom bar."""
         normalized = status_message.strip()
         lowered = normalized.lower()
 
@@ -1152,7 +1157,7 @@ class MainWindow(QMainWindow, ThemeMixin):
     def _set_status_chip(
         self, widget, text: str, tone: str = "neutral", tooltip: str | None = None
     ):
-        """Applique texte, ton et tooltip a un label de statut."""
+        """Apply text, tone, and tooltip to a status label."""
         if widget is None:
             return
 
@@ -1163,18 +1168,18 @@ class MainWindow(QMainWindow, ThemeMixin):
         widget.style().polish(widget)
 
     def show_progress_indicator(self, show: bool):
-        """Affiche/cache l'indicateur de progression."""
+        """Show/hide the progress indicator."""
         progress_dock = self.ui_builder.get_dock_widget("progress_dock")
         if progress_dock:
             progress_dock.setVisible(show)
 
     def update_progress_bar(self, percentage: int):
-        """Update la barre de progression."""
+        """Update the progress bar."""
         if hasattr(self, "progress_panel"):
             self.progress_panel.update_progress(percentage)
 
     def show_operation_state(self, state: OperationViewState):
-        """Affiche ou met a jour l'operation en cours dans le dock Operations."""
+        """Show or update current operation in the Operations dock."""
         progress_dock = self.ui_builder.get_dock_widget("progress_dock")
         if progress_dock:
             progress_dock.setVisible(True)
@@ -1184,17 +1189,17 @@ class MainWindow(QMainWindow, ThemeMixin):
     def set_operation_action_handlers(
         self, handlers: dict[str, Callable[[], None]] | None
     ):
-        """Branche les callbacks d'action du panel Operations."""
+        """Attach action callbacks to the Operations panel."""
         if hasattr(self, "progress_panel"):
             self.progress_panel.set_operation_action_handlers(handlers)
 
     def clear_operation_state(self):
-        """Replie et reinitialise la surface Operations."""
+        """Collapse and reset the Operations surface."""
         if hasattr(self, "progress_panel"):
             self.progress_panel.reset_progress()
 
     def set_view_mode(self, mode: str):
-        """Set le mode d'affichage."""
+        """Set the view mode."""
         if mode != self.current_view_mode:
             self.current_view_mode = mode
             self.ui_builder.set_view_mode(mode)
@@ -1202,11 +1207,11 @@ class MainWindow(QMainWindow, ThemeMixin):
         self._update_active_view_data(self.current_files)
 
     def show_log_console(self, show: bool = True):
-        """Affiche/cache la console de logs."""
+        """Show/hide the log console."""
         self.ui_builder.show_dock_widget("log_dock", show)
 
     def cleanup(self):
-        """Nettoie les ressources de l'interface."""
+        """Clean up UI resources."""
         try:
             self.logger.info("Cleaning up MainWindow...")
             self.logger.info("MainWindow cleanup complete")

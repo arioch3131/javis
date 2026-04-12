@@ -166,20 +166,27 @@ class TestContentDatabaseService:
         self.mock_content_writer.return_value.create_content_item.assert_called_once_with(
             path, content_type, True, None, True, None
         )
+        self.mock_query_optimizer.invalidate_all.assert_called_once()
 
     def test_save_item_batch(self):
         items = [{"path": "/a.txt"}]
+        self.mock_content_writer.return_value.save_item_batch.return_value = [
+            MagicMock()
+        ]
         self.service.save_item_batch(items)
         self.mock_content_writer.return_value.save_item_batch.assert_called_once_with(
             items, True, None
         )
+        self.mock_query_optimizer.invalidate_all.assert_called_once()
 
     def test_update_metadata_batch(self):
         updates = [(1, {"title": "new"})]
+        self.mock_content_writer.return_value.update_metadata_batch.return_value = 1
         self.service.update_metadata_batch(updates)
         self.mock_content_writer.return_value.update_metadata_batch.assert_called_once_with(
             updates, False, None
         )
+        self.mock_query_optimizer.invalidate_all.assert_called_once()
 
     def test_find_items(self):
         self.service.find_items()
@@ -216,12 +223,16 @@ class TestContentDatabaseService:
         confidence = 0.9
         extraction_method = "llm"
         extraction_details = "details"
+        self.mock_content_writer.return_value.update_content_category.return_value = (
+            MagicMock()
+        )
         self.service.update_content_category(
             file_path, category, confidence, extraction_method, extraction_details
         )
         self.mock_content_writer.return_value.update_content_category.assert_called_once_with(
             file_path, category, confidence, extraction_method, extraction_details, None
         )
+        self.mock_query_optimizer.invalidate_all.assert_called_once()
 
     def test_get_uncategorized_items(self):
         self.service.get_uncategorized_items(content_type="image")
@@ -231,10 +242,14 @@ class TestContentDatabaseService:
 
     def test_clear_content_category(self):
         file_path = "/test/file.txt"
+        self.mock_content_writer.return_value.clear_content_category.return_value = (
+            MagicMock()
+        )
         self.service.clear_content_category(file_path)
         self.mock_content_writer.return_value.clear_content_category.assert_called_once_with(
             file_path, None
         )
+        self.mock_query_optimizer.invalidate_all.assert_called_once()
 
     def test_get_unique_categories(self):
         self.service.get_unique_categories()
@@ -260,6 +275,7 @@ class TestContentDatabaseService:
         )
         mock_session.commit.assert_called_once()
         mock_session.close.assert_called_once()
+        self.mock_query_optimizer.invalidate_all.assert_called_once()
 
     def test_clear_all_content_with_external_session(self):
         external_session = MagicMock()
@@ -298,6 +314,7 @@ class TestContentDatabaseService:
         mock_filtered.delete.assert_called_once_with(synchronize_session="fetch")
         mock_session.commit.assert_called_once()
         mock_session.close.assert_called_once()
+        self.mock_query_optimizer.invalidate_all.assert_called_once()
 
     def test_delete_content_by_paths_with_external_session(self):
         external_session = MagicMock()
