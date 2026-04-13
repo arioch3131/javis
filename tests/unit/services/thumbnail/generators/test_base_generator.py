@@ -35,7 +35,7 @@ class TestBaseThumbnailGenerator:
         with patch.object(
             BaseThumbnailGenerator, "__init_logger__"
         ) as mock_logger_init:
-            generator = ConcreteThumbnailGenerator()
+            ConcreteThumbnailGenerator()
             mock_logger_init.assert_called_once()
 
     def test_abstract_class_cannot_be_instantiated(self):

@@ -38,6 +38,7 @@ class TestThumbnailUtils(unittest.TestCase):
         self.image_file2 = os.path.join(self.temp_dir, "b_test_image2.png")
         self.image_file3 = os.path.join(self.temp_dir, "c_test_image3.gif")
         self.raw_image_file = os.path.join(self.temp_dir, "test_image.raw")
+        self.unusual_ext_image_file = os.path.join(self.temp_dir, "test_image.zzzimg")
         self.no_ext_file = os.path.join(self.temp_dir, "filewithnoext")
         self.subdir = os.path.join(self.temp_dir, "subdir")
         os.makedirs(self.subdir)
@@ -53,6 +54,8 @@ class TestThumbnailUtils(unittest.TestCase):
             f.write("fake image 3")
         with open(self.raw_image_file, "w") as f:
             f.write("fake raw image")
+        with open(self.unusual_ext_image_file, "w") as f:
+            f.write("fake unusual image")
         with open(self.no_ext_file, "w") as f:
             f.write("fake content")
         with open(self.image_in_subdir, "w") as f:
@@ -105,7 +108,7 @@ class TestThumbnailUtils(unittest.TestCase):
         with self.assertLogs(
             "ai_content_classifier.services.thumbnail.utils", level="DEBUG"
         ) as cm:
-            is_valid, error = validate_image_path(self.raw_image_file)
+            is_valid, error = validate_image_path(self.unusual_ext_image_file)
             self.assertTrue(is_valid)
             self.assertIn("Unusual image extension", cm.output[0])
 

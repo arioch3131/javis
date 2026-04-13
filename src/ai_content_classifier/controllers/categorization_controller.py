@@ -6,7 +6,6 @@ Controller for automatic file categorization.
 import csv
 import os
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from PyQt6.QtCore import QMutex, QThread, QTimer, QWaitCondition, QObject, pyqtSignal
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
@@ -16,6 +15,7 @@ from ai_content_classifier.core.logger import get_logger
 from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.llm.llm_service import LLMService
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
 from ai_content_classifier.views.widgets.common.operation_state import (
@@ -229,17 +229,7 @@ class CategorizationWorker(QThread):
 
     def _is_image_file(self, file_path: str) -> bool:
         """Determines if a file is an image."""
-        image_extensions = {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".webp",
-            ".svg",
-        }
-        return Path(file_path).suffix.lower() in image_extensions
+        return FileTypeService.is_image_file(file_path)
 
     def _build_hash_category_cache(self) -> None:
         """
@@ -501,24 +491,10 @@ class CategorizationController(QObject):
         """
         types_count = {"Images": 0, "Documents": 0, "Others": 0}
 
-        image_extensions = {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".webp",
-            ".svg",
-        }
-        document_extensions = {".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".md"}
-
         for file_path in file_paths:
-            ext = Path(file_path).suffix.lower()
-
-            if ext in image_extensions:
+            if FileTypeService.is_image_file(file_path):
                 types_count["Images"] += 1
-            elif ext in document_extensions:
+            elif FileTypeService.is_document_file(file_path):
                 types_count["Documents"] += 1
             else:
                 types_count["Others"] += 1
@@ -626,22 +602,10 @@ class CategorizationController(QObject):
         """Filters files according to the configuration."""
         filtered = []
 
-        image_extensions = {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".webp",
-            ".svg",
-        }
-
         only_uncategorized = config.get("only_uncategorized", False)
 
         for file_path in file_paths:
-            ext = Path(file_path).suffix.lower()
-            is_image = ext in image_extensions
+            is_image = FileTypeService.is_image_file(file_path)
 
             # Check if file should be processed based on type
             if (is_image and not config.get("process_images", True)) or (

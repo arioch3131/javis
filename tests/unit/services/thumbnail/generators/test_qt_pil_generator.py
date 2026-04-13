@@ -47,7 +47,7 @@ class TestQtPilGeneratorQtAvailability:
                 # Execute the exact try/except block from qt_pil_generator.py
                 # This should hit the except ImportError: QT_AVAILABLE = False line
                 try:
-                    from PyQt6.QtGui import QImage, QPixmap
+                    __import__("PyQt6.QtGui")
 
                     real_module.QT_AVAILABLE = True
                 except ImportError:
@@ -101,7 +101,7 @@ class TestQtPilGeneratorAdditionalCoverage:
                 with patch(
                     "ai_content_classifier.services.thumbnail.generators.qt_pil_generator.QImage"
                 ):
-                    result = generator.generate("test.jpg", (100, 100))
+                    generator.generate("test.jpg", (100, 100))
 
         # Should catch the exception and continue (lines 63-64)
         mock_image.save.assert_called_once()
@@ -150,7 +150,7 @@ class TestQtPilGeneratorAdditionalCoverage:
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
         # Test with very small quality factor that would result in 0 size
-        result = generator.generate("test.jpg", (100, 100), 0.001)
+        generator.generate("test.jpg", (100, 100), 0.001)
 
         # Should use max(int(size * quality_factor), 1) to ensure minimum size of 1
         mock_image.thumbnail.assert_called_once()
@@ -212,7 +212,7 @@ class TestQtPilGeneratorAdditionalCoverage:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.jpg", (100, 100))
+        generator.generate("test.jpg", (100, 100))
 
         # Should try LANCZOS, then BICUBIC, then NEAREST
         assert mock_image.thumbnail.call_count == 3
@@ -268,7 +268,7 @@ class TestQtPilGeneratorAdditionalCoverage:
                 mock_qpixmap.isNull.return_value = False
                 mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-                result = generator.generate("test.png", (100, 100))
+                generator.generate("test.png", (100, 100))
 
         # Should convert RGBA to RGB for Qt conversion (final if check)
         mock_image.convert.assert_called_with("RGB")
@@ -477,7 +477,7 @@ class TestQtPilGenerator:
             with patch(
                 "ai_content_classifier.services.thumbnail.generators.qt_pil_generator.QImage"
             ):
-                result = generator.generate("test.jpg", (100, 100))
+                generator.generate("test.jpg", (100, 100))
 
         assert mock_image_open.call_count == 2
         mock_image.load.assert_called_once()
@@ -548,7 +548,7 @@ class TestQtPilGenerator:
                 with patch(
                     "ai_content_classifier.services.thumbnail.generators.qt_pil_generator.QImage"
                 ):
-                    result = generator.generate("test.jpg", (100, 100))
+                    generator.generate("test.jpg", (100, 100))
 
         mock_image.save.assert_called_once()
         mock_image.close.assert_called()
@@ -576,7 +576,7 @@ class TestQtPilGenerator:
             with patch(
                 "ai_content_classifier.services.thumbnail.generators.qt_pil_generator.QImage"
             ):
-                result = generator.generate("test.jpg", (100, 100))
+                generator.generate("test.jpg", (100, 100))
 
     @patch(
         "ai_content_classifier.services.thumbnail.generators.qt_pil_generator.QT_AVAILABLE",
@@ -625,7 +625,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.png", (100, 100))
+        generator.generate("test.png", (100, 100))
 
         mock_image.convert.assert_called_with("RGBA")
 
@@ -676,7 +676,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.png", (100, 100))
+        generator.generate("test.png", (100, 100))
 
         mock_image.convert.assert_called_with("RGB")
 
@@ -727,7 +727,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.png", (100, 100))
+        generator.generate("test.png", (100, 100))
 
         mock_image.convert.assert_called_with("RGBA")
 
@@ -778,7 +778,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.png", (100, 100))
+        generator.generate("test.png", (100, 100))
 
         mock_image.convert.assert_called_with("RGB")
 
@@ -829,7 +829,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.tiff", (100, 100))
+        generator.generate("test.tiff", (100, 100))
 
         mock_image.convert.assert_called_with("RGB")
 
@@ -880,7 +880,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.unknown", (100, 100))
+        generator.generate("test.unknown", (100, 100))
 
         mock_image.convert.assert_called_with("RGB")
 
@@ -921,7 +921,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.jpg", (100, 100), 0.5)
+        generator.generate("test.jpg", (100, 100), 0.5)
 
         # Should call thumbnail with (50, 50) due to quality_factor=0.5
         mock_image.thumbnail.assert_called_once()
@@ -1069,7 +1069,7 @@ class TestQtPilGenerator:
         mock_qpixmap.isNull.return_value = False
         mock_qpixmap_class.fromImage.return_value = mock_qpixmap
 
-        result = generator.generate("test.png", (100, 100))
+        generator.generate("test.png", (100, 100))
 
         # Should convert: RGBA mode gets converted to RGB for Qt
         assert mock_image.convert.call_count >= 1

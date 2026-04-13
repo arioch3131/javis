@@ -57,9 +57,9 @@ class TestSvgGeneratorQtAvailability:
                 # Execute the exact try/except block from svg_generator.py
                 # This should hit the except ImportError: QT_AVAILABLE = False line
                 try:
-                    from PyQt6.QtCore import Qt
-                    from PyQt6.QtGui import QPainter, QPixmap
-                    from PyQt6.QtSvg import QSvgRenderer
+                    __import__("PyQt6.QtCore")
+                    __import__("PyQt6.QtGui")
+                    __import__("PyQt6.QtSvg")
 
                     svg_module.QT_AVAILABLE = True
                 except ImportError:

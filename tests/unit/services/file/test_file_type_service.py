@@ -166,3 +166,31 @@ class TestFileTypeService:
             FileTypeService.get_file_category("archive.tar.gz") == FileCategory.ARCHIVE
         )
         assert FileTypeService.is_archive_file("backup.tar.gz") is True
+
+    def test_normalize_extension_helpers(self):
+        assert FileTypeService.normalize_extension("JPG") == ".jpg"
+        assert FileTypeService.normalize_extension(".PDF") == ".pdf"
+        assert FileTypeService.normalize_extension("  ") == ""
+        assert FileTypeService.normalize_extensions(["JPG", ".png", ""]) == {
+            ".jpg",
+            ".png",
+        }
+
+    def test_get_extension_prefers_longest_match(self):
+        assert FileTypeService.get_extension("archive.tar.gz") == ".tar.gz"
+        assert FileTypeService.get_extension("README.GITIGNORE") == ".gitignore"
+        assert FileTypeService.get_extension("unknownfile") == ""
+
+    def test_get_content_type(self):
+        assert FileTypeService.get_content_type("photo.jpg") == "image"
+        assert FileTypeService.get_content_type("doc.pdf") == "document"
+        assert FileTypeService.get_content_type("movie.mp4") == "video"
+        assert FileTypeService.get_content_type("song.mp3") == "audio"
+        assert FileTypeService.get_content_type("archive.zip") == "content_item"
+
+    def test_text_like_and_text_format(self):
+        assert FileTypeService.is_text_like("README.md") is True
+        assert FileTypeService.is_text_like("archive.zip") is False
+        assert FileTypeService.get_text_format("notes.md") == "markdown"
+        assert FileTypeService.get_text_format("draft.docx") == "docx"
+        assert FileTypeService.get_text_format("image.jpg") == "unknown"

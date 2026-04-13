@@ -42,6 +42,7 @@ from PyQt6.QtCore import QUrl
 from ai_content_classifier.services.preprocessing.text_extraction_service import (
     TextExtractionService,
 )
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.theme.theme_service import (
     ThemePalette,
     get_theme_service,
@@ -817,24 +818,11 @@ class AdaptivePreviewWidget(QWidget):
 
     def is_image_file(self, file_path: str) -> bool:
         """Checks if the file is an image."""
-        image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"}
-        ext = os.path.splitext(file_path)[1].lower()
-        return ext in image_extensions
+        return FileTypeService.is_image_file(file_path)
 
     def is_document_file(self, file_path: str) -> bool:
         """Checks if the file is a document."""
-        document_extensions = {
-            ".pdf",
-            ".doc",
-            ".docx",
-            ".txt",
-            ".md",
-            ".odt",
-            ".rtf",
-            ".epub",
-        }
-        ext = os.path.splitext(file_path)[1].lower()
-        return ext in document_extensions
+        return FileTypeService.is_document_file(file_path)
 
     def _build_document_preview_text(
         self, file_path: str, metadata: Dict[str, Any]

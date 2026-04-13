@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from ai_content_classifier.core.logger import LoggableMixin
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 
 
 class BaseMetadataExtractor(ABC, LoggableMixin):
@@ -111,37 +112,20 @@ class BaseMetadataExtractor(ABC, LoggableMixin):
         Returns:
             General file type category
         """
-        extension = extension.lower()
+        normalized_ext = FileTypeService.normalize_extension(extension)
+        category = FileTypeService.get_file_category(normalized_ext)
 
-        # Define extension mappings
-        image_extensions = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"]
-        document_extensions = [
-            ".pdf",
-            ".doc",
-            ".docx",
-            ".xls",
-            ".xlsx",
-            ".ppt",
-            ".pptx",
-            ".txt",
-            ".rtf",
-        ]
-        audio_extensions = [".mp3", ".wav", ".flac", ".aac", ".ogg"]
-        video_extensions = [".mp4", ".avi", ".mov", ".mkv", ".wmv"]
-        archive_extensions = [".zip", ".rar", ".7z", ".tar", ".gz"]
-
-        if extension in image_extensions:
+        if category.name == "IMAGE":
             return "image"
-        elif extension in document_extensions:
+        if category.name == "DOCUMENT":
             return "document"
-        elif extension in audio_extensions:
+        if category.name == "AUDIO":
             return "audio"
-        elif extension in video_extensions:
+        if category.name == "VIDEO":
             return "video"
-        elif extension in archive_extensions:
+        if category.name == "ARCHIVE":
             return "archive"
-        else:
-            return "other"
+        return "other"
 
     def _format_size(self, size_bytes: int) -> str:
         """

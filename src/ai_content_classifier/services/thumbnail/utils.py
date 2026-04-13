@@ -10,6 +10,11 @@ import mimetypes
 from typing import Optional, Tuple, List, Union
 import logging
 
+from ai_content_classifier.services.file.file_type_service import (
+    FileCategory,
+    FileTypeService,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,18 +127,10 @@ def validate_image_path(path: str) -> Tuple[bool, str]:
     if not ext:
         return False, "File has no extension"
 
-    common_image_exts = {
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".gif",
-        ".bmp",
-        ".tiff",
-        ".tif",
-        ".webp",
-        ".svg",
-    }
-    if ext not in common_image_exts:
+    known_image_extensions = FileTypeService.get_extensions_for_category(
+        FileCategory.IMAGE
+    )
+    if ext not in known_image_extensions:
         # Still allow it, but warn it might not be an image
         logger.debug(f"Unusual image extension: {ext}")
 
@@ -280,25 +277,7 @@ def is_image_file(path: str, check_content: bool = False) -> bool:
     Returns:
         True if file appears to be an image
     """
-    # Check extension
-    ext = safe_get_file_extension(path)
-    image_extensions = {
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".gif",
-        ".bmp",
-        ".tiff",
-        ".tif",
-        ".webp",
-        ".svg",
-        ".ico",
-        ".psd",
-        ".raw",
-        ".dng",
-    }
-
-    if ext not in image_extensions:
+    if not FileTypeService.is_image_file(path):
         return False
 
     if not check_content:

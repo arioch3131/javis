@@ -3,7 +3,6 @@
 Unified LLM Service with integrated CategoryAnalyzer.
 """
 
-import os
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -23,6 +22,7 @@ from ai_content_classifier.services.llm.category_analyzer import (
 )
 from ai_content_classifier.services.llm.model_manager import ModelManager
 from ai_content_classifier.services.database.database_service import DatabaseService
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.preprocessing.text_extraction_service import (
     TextExtractionService,
 )
@@ -678,17 +678,7 @@ class LLMService(LoggableMixin):
 
     def _is_image_file(self, file_path: str) -> bool:
         """Determines if a file is an image based on its extension."""
-        image_extensions = {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".webp",
-            ".svg",
-        }
-        return os.path.splitext(file_path.lower())[1] in image_extensions
+        return FileTypeService.is_image_file(file_path)
 
     def get_extraction_statistics(
         self, response_text: str, categories: List[str]

@@ -159,10 +159,6 @@ class TestContentModels:
         db_session.add(image)
         db_session.commit()
 
-        # The repr should handle None dimensions gracefully
-        expected_repr = (
-            f"<Image(id={image.id}, path='/path/to/image.jpg', dimensions='NonexNone')>"
-        )
         # This might actually fail - the repr method might need improvement
 
     def test_document_creation(self, db_session):
@@ -477,7 +473,7 @@ class TestContentModels:
 
         extracted_items = (
             db_session.query(ContentItem)
-            .filter(ContentItem.metadata_extracted == True)
+            .filter(ContentItem.metadata_extracted.is_(True))
             .all()
         )
 
@@ -544,8 +540,6 @@ class TestContentModels:
         collection.contents.append(content)
         content.tags.append(tag)
         db_session.commit()
-
-        content_id = content.id
 
         # Delete the content item
         db_session.delete(content)

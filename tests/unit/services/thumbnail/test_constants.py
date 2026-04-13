@@ -10,7 +10,7 @@ from unittest import mock
 sys.modules["PyQt6"] = Mock()
 sys.modules["PyQt6.QtGui"] = Mock()
 
-from ai_content_classifier.services.thumbnail import constants
+from ai_content_classifier.services.thumbnail import constants  # noqa: E402
 
 
 class TestConstants(unittest.TestCase):

@@ -1,4 +1,3 @@
-import os
 import threading
 import time
 from dataclasses import replace
@@ -10,6 +9,7 @@ from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
 from ai_content_classifier.services.file.scan_models import ScanProgress
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.file.scanners.base_scanner import BaseScanner
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
 from ai_content_classifier.services.thumbnail.thumbnail_service import ThumbnailService
@@ -232,82 +232,9 @@ class ScanPipelineService(LoggableMixin):
         return result
 
     def _is_image_file(self, file_path: str) -> bool:
-        ext = os.path.splitext(file_path)[1].lower()
-        image_extensions = {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".webp",
-            ".ico",
-            ".heic",
-            ".heif",
-            ".svg",
-            ".raw",
-        }
-        return ext in image_extensions
+        # Compatibility helper retained for legacy tests/callers.
+        return FileTypeService.is_image_file(file_path)
 
     def _determine_content_type(self, file_path: str) -> str:
-        ext = os.path.splitext(file_path)[1].lower()
-        image_exts = {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".webp",
-            ".ico",
-            ".heic",
-            ".heif",
-            ".svg",
-            ".raw",
-        }
-        document_exts = {
-            ".pdf",
-            ".doc",
-            ".docx",
-            ".txt",
-            ".md",
-            ".rtf",
-            ".odt",
-            ".csv",
-            ".xls",
-            ".xlsx",
-            ".ppt",
-            ".pptx",
-        }
-        video_exts = {
-            ".mp4",
-            ".avi",
-            ".mov",
-            ".wmv",
-            ".flv",
-            ".webm",
-            ".mkv",
-            ".m4v",
-            ".3gp",
-            ".ogv",
-        }
-        audio_exts = {
-            ".mp3",
-            ".wav",
-            ".flac",
-            ".aac",
-            ".ogg",
-            ".wma",
-            ".m4a",
-            ".opus",
-            ".aiff",
-        }
-        if ext in image_exts:
-            return "image"
-        if ext in document_exts:
-            return "document"
-        if ext in video_exts:
-            return "video"
-        if ext in audio_exts:
-            return "audio"
-        return "content_item"
+        # Compatibility helper retained for legacy tests/callers.
+        return FileTypeService.get_content_type(file_path)

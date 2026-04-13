@@ -24,7 +24,7 @@ class TestConfigModels:
             description="Base URL for the Ollama LLM service.",
         )
         assert definition.key == ConfigKey.API_URL
-        assert definition.type == str
+        assert definition.type is str
         assert definition.default == "http://localhost:11434"
         assert definition.category == "API"
         assert definition.label == "API URL"
@@ -42,17 +42,17 @@ class TestConfigModels:
     def test_config_definitions_content(self):
         # Spot check a few definitions for correctness
         api_url_def = CONFIG_DEFINITIONS[ConfigKey.API_URL]
-        assert api_url_def.type == str
+        assert api_url_def.type is str
         assert api_url_def.default == "http://localhost:11434"
         assert api_url_def.category == "API"
 
         image_ext_def = CONFIG_DEFINITIONS[ConfigKey.IMAGE_EXTENSIONS]
-        assert image_ext_def.type == list
+        assert image_ext_def.type is list
         assert ".jpg" in image_ext_def.default
         assert image_ext_def.category == "Scanning"
 
         categories_def = CONFIG_DEFINITIONS[ConfigKey.CATEGORIES]
-        assert categories_def.type == list
+        assert categories_def.type is list
         assert "Work" in categories_def.default
         assert categories_def.category == "Categorization"
 

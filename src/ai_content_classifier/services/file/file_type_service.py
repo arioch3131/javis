@@ -17,7 +17,7 @@ Used by:
 import os
 
 from enum import Enum
-from typing import Set
+from typing import Iterable, Optional, Set
 
 
 class FileCategory(Enum):
@@ -317,6 +317,153 @@ class FileTypeService:
         ".editorconfig",
     }
 
+    # Text-like formats used by lightweight text extraction/preprocessing.
+    TEXT_LIKE_EXTENSIONS: Set[str] = {
+        ".txt",
+        ".md",
+        ".markdown",
+        ".rst",
+        ".log",
+        ".csv",
+        ".tsv",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".xml",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".toml",
+        ".py",
+        ".js",
+        ".ts",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".go",
+        ".rs",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".sql",
+        ".css",
+        ".html",
+        ".htm",
+    }
+
+    TEXT_FORMAT_MAP = {
+        ".txt": "text",
+        ".md": "markdown",
+        ".markdown": "markdown",
+        ".csv": "csv",
+        ".pdf": "pdf",
+        ".doc": "doc",
+        ".docx": "docx",
+        ".rtf": "rtf",
+        ".odt": "odt",
+    }
+
+    _CATEGORY_EXTENSIONS = {
+        FileCategory.IMAGE: IMAGE_EXTENSIONS,
+        FileCategory.DOCUMENT: DOCUMENT_EXTENSIONS,
+        FileCategory.VIDEO: VIDEO_EXTENSIONS,
+        FileCategory.AUDIO: AUDIO_EXTENSIONS,
+        FileCategory.ARCHIVE: ARCHIVE_EXTENSIONS,
+        FileCategory.CODE: CODE_EXTENSIONS,
+    }
+
+    @classmethod
+    def normalize_extension(cls, value: Optional[str]) -> str:
+        """Normalize an extension to lowercase '.ext' format."""
+        if value is None:
+            return ""
+
+        ext = str(value).strip().lower()
+        if not ext:
+            return ""
+        if not ext.startswith("."):
+            ext = f".{ext}"
+        return ext
+
+    @classmethod
+    def normalize_extensions(cls, values: Optional[Iterable[str]]) -> Set[str]:
+        """Normalize a list/set/string of extensions to lowercase '.ext' values."""
+        if values is None:
+            return set()
+
+        raw_values: Iterable[str]
+        if isinstance(values, str):
+            raw_values = (part.strip() for part in values.split(","))
+        else:
+            raw_values = values
+
+        normalized: Set[str] = set()
+        for value in raw_values:
+            ext = cls.normalize_extension(value)
+            if ext:
+                normalized.add(ext)
+        return normalized
+
+    @classmethod
+    def get_extension(cls, file_path: str) -> str:
+        """
+        Return the best-matching extension for a path.
+
+        Uses longest-known-extension matching first (handles '.tar.gz',
+        '.gitignore', etc.), then falls back to splitext.
+        """
+        normalized_path = str(file_path or "").strip().lower()
+        if not normalized_path:
+            return ""
+
+        for ext in sorted(cls.get_all_extensions(), key=len, reverse=True):
+            if normalized_path.endswith(ext):
+                return ext
+
+        return os.path.splitext(normalized_path)[1]
+
+    @classmethod
+    def get_extensions_for_category(cls, category: FileCategory) -> Set[str]:
+        """Return extension set for a file category."""
+        return set(cls._CATEGORY_EXTENSIONS.get(category, set()))
+
+    @classmethod
+    def get_all_extensions(cls) -> Set[str]:
+        """Return all known extensions across categories."""
+        all_exts: Set[str] = set()
+        for ext_set in cls._CATEGORY_EXTENSIONS.values():
+            all_exts.update(ext_set)
+        all_exts.update(cls.TEXT_LIKE_EXTENSIONS)
+        return all_exts
+
+    @classmethod
+    def get_content_type(cls, file_path: str) -> str:
+        """Return canonical database content type from path."""
+        category = cls.get_file_category(file_path)
+        if category == FileCategory.IMAGE:
+            return "image"
+        if category == FileCategory.DOCUMENT:
+            return "document"
+        if category == FileCategory.VIDEO:
+            return "video"
+        if category == FileCategory.AUDIO:
+            return "audio"
+        return "content_item"
+
+    @classmethod
+    def is_text_like(cls, file_path: str) -> bool:
+        """Return True for text-like formats commonly parseable as text."""
+        ext = cls.get_extension(file_path)
+        return ext in cls.TEXT_LIKE_EXTENSIONS
+
+    @classmethod
+    def get_text_format(cls, file_path: str) -> str:
+        """Return the preprocessing text format identifier for a file path."""
+        ext = cls.get_extension(file_path)
+        return cls.TEXT_FORMAT_MAP.get(ext, "unknown")
+
     @classmethod
     def is_image_file(cls, file_path: str) -> bool:
         """
@@ -328,7 +475,7 @@ class FileTypeService:
         Returns:
             True if it's an image file, False otherwise
         """
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = cls.get_extension(file_path)
         return ext in cls.IMAGE_EXTENSIONS
 
     @classmethod
@@ -342,7 +489,7 @@ class FileTypeService:
         Returns:
             True if it's a document file, False otherwise
         """
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = cls.get_extension(file_path)
         return ext in cls.DOCUMENT_EXTENSIONS
 
     @classmethod
@@ -356,7 +503,7 @@ class FileTypeService:
         Returns:
             True if it's a video file, False otherwise
         """
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = cls.get_extension(file_path)
         return ext in cls.VIDEO_EXTENSIONS
 
     @classmethod
@@ -370,7 +517,7 @@ class FileTypeService:
         Returns:
             True if it's an audio file, False otherwise
         """
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = cls.get_extension(file_path)
         return ext in cls.AUDIO_EXTENSIONS
 
     @classmethod
@@ -384,7 +531,7 @@ class FileTypeService:
         Returns:
             True if it's an archive file, False otherwise
         """
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = cls.get_extension(file_path)
         return ext in cls.ARCHIVE_EXTENSIONS
 
     @classmethod
@@ -398,7 +545,7 @@ class FileTypeService:
         Returns:
             True if it's a code file, False otherwise
         """
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = cls.get_extension(file_path)
         return ext in cls.CODE_EXTENSIONS
 
     @classmethod
@@ -504,6 +651,11 @@ def is_audio_file(file_path: str) -> bool:
 def get_file_category(file_path: str) -> str:
     """Convenience function - gets file category as string."""
     return FileTypeService.get_file_category_name(file_path)
+
+
+def get_content_type(file_path: str) -> str:
+    """Convenience function - gets canonical content type string."""
+    return FileTypeService.get_content_type(file_path)
 
 
 def format_file_size(size_bytes: int) -> str:

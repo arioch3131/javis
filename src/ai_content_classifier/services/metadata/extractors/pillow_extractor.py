@@ -13,6 +13,7 @@ from typing import Any, Dict
 from ai_content_classifier.services.metadata.extractors.base_extractor import (
     BaseMetadataExtractor,
 )
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 
 
 class PillowImageExtractor(BaseMetadataExtractor):
@@ -53,22 +54,7 @@ class PillowImageExtractor(BaseMetadataExtractor):
         super().__init__()
 
         # Standard image formats supported by Pillow
-        self.supported_extensions = [
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".tif",
-            ".webp",
-            ".ico",
-            ".heic",
-            ".heif",
-            ".jp2",
-            ".j2k",
-            ".avif",
-        ]
+        self.supported_extensions = set(FileTypeService.IMAGE_EXTENSIONS)
 
         # Check if Pillow is available
         self.pillow_available = self._check_dependency("PIL")
