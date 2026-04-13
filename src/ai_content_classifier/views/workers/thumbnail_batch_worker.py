@@ -7,7 +7,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 class BatchThumbnailWorker(QThread):
     """Optimized worker for batch generation."""
 
-    thumbnail_ready = pyqtSignal(str, str)
+    thumbnail_ready = pyqtSignal(str, object)
 
     def __init__(self, file_paths: List[str], generator_func):
         super().__init__()
@@ -22,9 +22,16 @@ class BatchThumbnailWorker(QThread):
                 break
 
             try:
-                thumbnail_path = self.generator_func(file_path)
-                if thumbnail_path and os.path.exists(thumbnail_path):
-                    self.thumbnail_ready.emit(file_path, thumbnail_path)
+                thumbnail_payload = self.generator_func(file_path)
+                if not thumbnail_payload:
+                    continue
+
+                if isinstance(thumbnail_payload, str):
+                    if os.path.exists(thumbnail_payload):
+                        self.thumbnail_ready.emit(file_path, thumbnail_payload)
+                    continue
+
+                self.thumbnail_ready.emit(file_path, thumbnail_payload)
             except Exception as e:
                 print(f"Batch generation error: {e}")
 

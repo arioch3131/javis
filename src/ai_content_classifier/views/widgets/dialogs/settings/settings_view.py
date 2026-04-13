@@ -3,6 +3,8 @@
 Dynamically generated settings dialog for the application.
 """
 
+from typing import Callable, Optional
+
 from ai_content_classifier.controllers.llm_controller import LLMController
 from ai_content_classifier.models.config_models import ConfigKey
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -34,10 +36,15 @@ class SettingsView(ThemedDialog):
     test_llm_connection_requested = pyqtSignal(str, QObject)
 
     def __init__(
-        self, config_service: ConfigService, llm_controller: LLMController, parent=None
+        self,
+        config_service: ConfigService,
+        llm_controller: LLMController,
+        parent=None,
+        on_clear_thumbnail_cache: Optional[Callable[[], None]] = None,
     ):
         self.config_service = config_service
         self.llm_controller = llm_controller
+        self._on_clear_thumbnail_cache = on_clear_thumbnail_cache
         self.input_widgets = {}  # Initialize input_widgets here
         self._language_combo = None
         self._language_codes: list[str] = []
@@ -116,6 +123,15 @@ class SettingsView(ThemedDialog):
                 if widget:
                     form_layout.addRow(f"{definition.label}:", widget)
                     self.input_widgets[key] = widget
+                    if key == ConfigKey.THUMBNAIL_CACHE_MAX_SIZE_MB:
+                        note = QLabel(
+                            tr(
+                                "settings.thumbnails.max_size_note",
+                                "Note: max size is automatically enabled on omni-cache 2.1.0+.",
+                            )
+                        )
+                        note.setWordWrap(True)
+                        form_layout.addRow("", note)
 
             # Add specific buttons or elements per category
             if category_name == "API":
@@ -135,6 +151,17 @@ class SettingsView(ThemedDialog):
                     )
                 )
                 form_layout.addRow(self.connection_status_label)
+            elif (
+                category_name == "Thumbnails"
+                and self._on_clear_thumbnail_cache is not None
+            ):
+                clear_thumb_cache_button = QPushButton(
+                    tr("settings.clear_thumbnail_cache", "Clear Thumbnail Cache")
+                )
+                clear_thumb_cache_button.clicked.connect(
+                    self._on_clear_thumbnail_cache_clicked
+                )
+                form_layout.addRow(clear_thumb_cache_button)
 
             tab_label = tr(f"settings.categories.{category_name}", category_name)
             self.tab_widget.addTab(category_widget, tab_label)
@@ -209,6 +236,19 @@ class SettingsView(ThemedDialog):
                     "settings.configuration_error_api_missing",
                     "API URL field not found in settings dialog.",
                 ),
+            )
+
+    def _on_clear_thumbnail_cache_clicked(self):
+        """Trigger clear-thumbnail-cache callback from settings UI."""
+        if self._on_clear_thumbnail_cache is None:
+            return
+        try:
+            self._on_clear_thumbnail_cache()
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                tr("settings.clear_thumbnail_cache", "Clear Thumbnail Cache"),
+                str(exc),
             )
 
     def _on_models_retrieved(self, models: list):

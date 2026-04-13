@@ -12,6 +12,10 @@ class TestConfigModels:
         assert ConfigKey.IMAGE_MODEL.value == "llm.image_model"
         assert ConfigKey.IMAGE_EXTENSIONS.value == "scan.image_extensions"
         assert ConfigKey.THUMBNAIL_SIZE.value == "thumbnails.size"
+        assert (
+            ConfigKey.THUMBNAIL_CACHE_CLEANUP_INTERVAL_SEC.value
+            == "thumbnails.cache.cleanup_interval_sec"
+        )
         assert ConfigKey.CATEGORIES.value == "categorization.categories"
 
     def test_config_definition_dataclass(self):

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-13
+
+### Added
+- Added unified thumbnail disk-cache settings:
+  - `thumbnails.cache.enabled`
+  - `thumbnails.cache.ttl_sec`
+  - `thumbnails.cache.cleanup_interval_sec`
+  - `thumbnails.cache.max_size_mb`
+  - `thumbnails.cache.renew_on_hit`
+  - `thumbnails.cache.renew_threshold`
+- Added a dedicated Tools action to clear thumbnail cache (`Tools > Database > Clear Thumbnail Cache`).
+- Added a settings action button to clear thumbnail cache directly from the Thumbnails tab.
+
+### Changed
+- Upgraded `omni-cache` to `2.0.0` for DISK adapter support used by V1.3 thumbnail cache management.
+- Extended `OmniCacheRuntime` with idempotent DISK adapter registration for thumbnails.
+- Added compatibility strategy for `omni-cache` DISK max-size support:
+  - `2.0.0`: `max_size` is ignored with explicit debug logging.
+  - `2.1.0+`: `max_size` is auto-enabled from app settings without app-level API changes.
+- `FilePresenter` now loads thumbnail cache settings from `ConfigService` with safe fallbacks and uses the registered DISK adapter when available.
+- Unified thumbnail caching flow to rely on `omni-cache` DISK as the single source of truth for TTL/cleanup (removed app-managed duplicate disk TTL cleanup logic).
+- Grid thumbnail pipeline now consumes generated pixmaps through cache-backed payloads instead of requiring app-managed thumbnail file paths.
+
+### Fixed
+- Added strict settings validation fallback behavior in `ConfigService` using per-key validation rules.
+
 ## [1.2.0] - 2026-04-13
 
 ### Added

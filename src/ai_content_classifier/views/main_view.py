@@ -141,7 +141,11 @@ class MainView(QObject):
             )
 
             # === FILE PRESENTER WITH THUMBNAIL SERVICE ===
-            self.file_presenter = FilePresenter(self.main_window, self.db_service)
+            self.file_presenter = FilePresenter(
+                self.main_window,
+                self.db_service,
+                config_service=self.config_service,
+            )
 
             # Configure thumbnail service in the presenter
             self.file_presenter.set_thumbnail_service(self.thumbnail_service)
@@ -167,9 +171,12 @@ class MainView(QObject):
                 "handle_scan_request": self.ui_event_handler.handle_scan_request,
                 "handle_open_folder_request": self.ui_event_handler.handle_open_folder_request,
                 "handle_quick_scan_request": self.ui_event_handler.handle_quick_scan_request,
-                "handle_settings_request": self.settings_manager.open_settings_dialog,  # ✅ Direct vers SettingsManager
+                "handle_settings_request": lambda: (
+                    self.settings_manager.open_settings_dialog(self.main_window)
+                ),
                 "handle_clear_db_request": self.ui_event_handler.handle_clear_db_request,
                 "handle_remove_filtered_results_request": self.ui_event_handler.handle_remove_filtered_results_request,
+                "handle_clear_thumbnail_cache_request": self._handle_clear_thumbnail_cache_request,
                 "handle_categorization_request": self.ui_event_handler.handle_categorization_request,
                 "handle_auto_organize_request": self.ui_event_handler.handle_organize_request,
                 "handle_refresh_request": self._handle_refresh_request,  # ✅ Handler local
@@ -199,7 +206,7 @@ class MainView(QObject):
 
             # ✅ Generator configuration (important for thumbnails)
             self.main_window.set_thumbnail_generator(
-                self.file_presenter.get_or_create_thumbnail
+                self.file_presenter.get_or_create_thumbnail_pixmap
             )
             self.main_window.set_metadata_generator(
                 self.file_presenter.get_or_create_metadata
@@ -213,6 +220,30 @@ class MainView(QObject):
         except Exception as e:
             self.logger.error(f"Error connecting MainWindow handlers: {e}")
             raise
+
+    def _handle_clear_thumbnail_cache_request(self):
+        """Clear thumbnail cache from tools action and surface user feedback."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        try:
+            if hasattr(self.file_manager, "clear_thumbnail_cache"):
+                self.file_manager.clear_thumbnail_cache()
+            if hasattr(self, "file_presenter") and hasattr(
+                self.file_presenter, "clear_cache"
+            ):
+                self.file_presenter.clear_cache()
+            QMessageBox.information(
+                self.main_window,
+                "Thumbnail Cache",
+                "Thumbnail cache cleared successfully.",
+            )
+        except Exception as exc:
+            self.logger.error(f"Error clearing thumbnail cache: {exc}", exc_info=True)
+            QMessageBox.warning(
+                self.main_window,
+                "Thumbnail Cache",
+                f"Failed to clear thumbnail cache: {exc}",
+            )
 
     def _connect_signals(self):
         """✅ CORRIGÉ: Connect les signaux entre managers (pas les handlers UI)."""

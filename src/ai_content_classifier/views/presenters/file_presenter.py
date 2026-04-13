@@ -6,16 +6,19 @@ CORRECTED: Uses the correct ThumbnailService API and centralized file type servi
 
 import os
 import sys
+from io import BytesIO
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ai_content_classifier.core.logger import get_logger
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QObject, QThread, pyqtSignal
+from PyQt6.QtGui import QPixmap
 from ai_content_classifier.services.content_database_service import (
     ContentDatabaseService,
 )
 from ai_content_classifier.services.file.file_type_service import is_image_file
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
+from ai_content_classifier.services.config_service import ConfigKey, ConfigService
 from ai_content_classifier.views.main_window import MainWindow
 from ai_content_classifier.views.widgets.dialogs.file.file_details_dialog import (
     FileDetailsDialog,
@@ -47,7 +50,11 @@ class FilePresenter(QObject):
     _file_data_error = pyqtSignal(int, str)  # (request_id, error_message)
 
     def __init__(
-        self, main_window: MainWindow, db_service: ContentDatabaseService, parent=None
+        self,
+        main_window: MainWindow,
+        db_service: ContentDatabaseService,
+        config_service: Optional[ConfigService] = None,
+        parent=None,
     ):
         super().__init__(parent)
         self.logger = get_logger(
@@ -56,6 +63,7 @@ class FilePresenter(QObject):
 
         self.main_window = main_window
         self.db_service = db_service
+        self.config_service = config_service
         self.thumbnail_service: Optional[ThumbnailService] = None
         self.metadata_service: Optional[MetadataService] = None
 
@@ -65,10 +73,8 @@ class FilePresenter(QObject):
 
         # Cache of generated thumbnails
         self._cache_runtime = get_cache_runtime()
-        self.thumbnail_cache = self._cache_runtime.memory_cache(
-            "ui:file_presenter:thumbnails",
-            default_ttl=1800,
-        )
+        self._thumbnail_cache_settings = self._load_thumbnail_cache_settings()
+        self.thumbnail_cache = self._create_thumbnail_cache_handle()
         self._file_data_worker: Optional["_FileDataWorker"] = None
         self._file_data_request_id = 0
         self._async_threshold = 1000
@@ -79,6 +85,90 @@ class FilePresenter(QObject):
         self._details_dialog_path: Optional[str] = None
 
         self.logger.debug("File Presenter initialized")
+
+    def _load_thumbnail_cache_settings(self) -> Dict[str, Any]:
+        """Load thumbnail cache settings with safe fallbacks."""
+        defaults = {
+            "enabled": True,
+            "ttl_sec": 3600,
+            "cleanup_interval_sec": 300,
+            "max_size_mb": 1024,
+            "renew_on_hit": False,
+            "renew_threshold": 0.5,
+        }
+        if self.config_service is None:
+            return defaults
+
+        try:
+            settings = {
+                "enabled": bool(
+                    self.config_service.get(ConfigKey.THUMBNAIL_CACHE_ENABLED)
+                ),
+                "ttl_sec": int(
+                    self.config_service.get(ConfigKey.THUMBNAIL_CACHE_TTL_SEC)
+                ),
+                "cleanup_interval_sec": int(
+                    self.config_service.get(
+                        ConfigKey.THUMBNAIL_CACHE_CLEANUP_INTERVAL_SEC
+                    )
+                ),
+                "max_size_mb": int(
+                    self.config_service.get(ConfigKey.THUMBNAIL_CACHE_MAX_SIZE_MB)
+                ),
+                "renew_on_hit": bool(
+                    self.config_service.get(ConfigKey.THUMBNAIL_CACHE_RENEW_ON_HIT)
+                ),
+                "renew_threshold": float(
+                    self.config_service.get(ConfigKey.THUMBNAIL_CACHE_RENEW_THRESHOLD)
+                ),
+            }
+        except Exception as exc:
+            self.logger.warning(
+                "Unable to load thumbnail cache settings, using defaults: %s", exc
+            )
+            return defaults
+
+        if settings["ttl_sec"] <= 0:
+            settings["ttl_sec"] = defaults["ttl_sec"]
+        if settings["cleanup_interval_sec"] <= 0:
+            settings["cleanup_interval_sec"] = defaults["cleanup_interval_sec"]
+        if settings["max_size_mb"] <= 0:
+            settings["max_size_mb"] = defaults["max_size_mb"]
+        if not (0.0 < settings["renew_threshold"] <= 1.0):
+            settings["renew_threshold"] = defaults["renew_threshold"]
+
+        return settings
+
+    def _create_thumbnail_cache_handle(self):
+        """Create namespaced thumbnail cache (DISK adapter when enabled)."""
+        settings = self._thumbnail_cache_settings
+        adapter = "memory"
+
+        if settings["enabled"]:
+            cache_dir = self._resolve_thumbnail_cache_dir()
+            os.makedirs(cache_dir, exist_ok=True)
+            disk_ok = self._cache_runtime.register_thumbnail_disk_adapter(
+                name="thumbnail_disk",
+                cache_dir=cache_dir,
+                default_ttl=settings["ttl_sec"],
+                cleanup_interval_sec=settings["cleanup_interval_sec"],
+                renew_on_hit=settings["renew_on_hit"],
+                renew_threshold=settings["renew_threshold"],
+                max_size_mb=settings["max_size_mb"],
+            )
+            if disk_ok:
+                adapter = "thumbnail_disk"
+                self.logger.debug("Thumbnail cache adapter selected: thumbnail_disk")
+            else:
+                self.logger.debug(
+                    "Thumbnail disk adapter unavailable; falling back to memory adapter."
+                )
+
+        return self._cache_runtime.memory_cache(
+            "ui:file_presenter:thumbnails",
+            default_ttl=settings["ttl_sec"],
+            adapter=adapter,
+        )
 
     def set_thumbnail_service(self, thumbnail_service: ThumbnailService):
         """
@@ -278,158 +368,90 @@ class FilePresenter(QObject):
 
     def get_or_create_thumbnail(self, file_path: str) -> Optional[str]:
         """
-        Generates or retrieves a thumbnail for a file.
+        Legacy path-based API kept for compatibility.
 
-        ⚠️ CORRECTED VERSION: Uses the correct ThumbnailService API and centralized file type service
-
-        Args:
-            file_path: Path to the file
-
-        Returns:
-            Path to the thumbnail or None if it cannot be generated or if it's not an image
+        Disk cache is now fully delegated to omni-cache, so no app-managed thumbnail
+        files are produced here.
         """
+        _ = file_path
+        return None
+
+    def get_or_create_thumbnail_pixmap(self, file_path: str) -> Optional[QPixmap]:
+        """Generate or retrieve a thumbnail pixmap using omni-cache as the sole store."""
         try:
-            # === 1. FIRST, CHECK IF IT'S AN IMAGE ===
             if not is_image_file(file_path):
-                # It's not an image, do not try to create a thumbnail
                 return None
-
-            # Skip generated thumbnails to avoid recursive thumbnail chains.
-            if self._is_generated_thumbnail_file(file_path):
-                return None
-
-            # === 2. CHECK CACHE FIRST ===
-            thumbnail_path = self.thumbnail_cache.get(file_path, default=None)
-            if thumbnail_path:
-                if os.path.exists(thumbnail_path):
-                    return thumbnail_path
-                else:
-                    # Clean cache if file no longer exists
-                    self.thumbnail_cache.delete(file_path)
-
-            # === 3. CHECK IF SOURCE FILE EXISTS ===
             if not os.path.exists(file_path):
-                self.logger.warning(f"File not found for thumbnail: {file_path}")
                 return None
 
-            # === 4. USE THE THUMBNAIL SERVICE WITH THE CORRECT API ===
-            if self.thumbnail_service:
-                # ✅ USE create_thumbnail() instead of get_or_create_thumbnail()
-                thumbnail_result = self.thumbnail_service.create_thumbnail(
-                    image_path=file_path,  # Correct parameter
-                    size=None,  # Uses default size
-                )
+            cached_payload = self.thumbnail_cache.get(file_path, default=None)
+            if isinstance(cached_payload, bytes):
+                cached_pixmap = self._pixmap_from_png_bytes(cached_payload)
+                if cached_pixmap is not None:
+                    return cached_pixmap
+                self.thumbnail_cache.delete(file_path)
 
-                # Check the result
-                if (
-                    thumbnail_result
-                    and hasattr(thumbnail_result, "success")
-                    and thumbnail_result.success
-                ):
-                    # Extract thumbnail path from the result
-                    thumbnail_path = None
+            if self.thumbnail_service is None:
+                return None
 
-                    # ThumbnailResult can have different attributes depending on implementation
-                    if (
-                        hasattr(thumbnail_result, "thumbnail_path")
-                        and thumbnail_result.thumbnail_path
-                    ):
-                        thumbnail_path = thumbnail_result.thumbnail_path
-                    elif (
-                        hasattr(thumbnail_result, "thumbnail")
-                        and thumbnail_result.thumbnail
-                    ):
-                        # If it's an Image object, it needs to be saved
-                        thumbnail_path = self._save_thumbnail_to_disk(
-                            thumbnail_result.thumbnail, file_path
-                        )
-
-                    if thumbnail_path and os.path.exists(thumbnail_path):
-                        # Cache
-                        self.thumbnail_cache.set(file_path, thumbnail_path)
-
-                        # Emit signal
-                        self.thumbnail_generated.emit(file_path, thumbnail_path)
-
-                        self.logger.debug(f"Thumbnail generated: {thumbnail_path}")
-                        return thumbnail_path
-                    else:
-                        self.logger.warning(
-                            f"Thumbnail generated but path not found for: {file_path}"
-                        )
-                else:
-                    self.logger.debug(f"Thumbnail generation failed for: {file_path}")
-                    if hasattr(thumbnail_result, "error_message"):
-                        self.logger.debug(f"Error: {thumbnail_result.error_message}")
-
-            # === 5. FALLBACK ===
-            return self._generate_fallback_thumbnail(file_path)
-
-        except Exception as e:
-            self.logger.warning(f"Error generating thumbnail for {file_path}: {e}")
-            return None
-
-    def _save_thumbnail_to_disk(
-        self, thumbnail_obj, original_file_path: str
-    ) -> Optional[str]:
-        """
-        Saves a thumbnail object to disk.
-
-        Args:
-            thumbnail_obj: PIL.Image or QPixmap object
-            original_file_path: Path to the original file
-
-        Returns:
-            Path to the saved thumbnail file or None
-        """
-        try:
-            if self._is_generated_thumbnail_file(original_file_path):
-                return original_file_path
-
-            # Create a file name for the thumbnail
-            base_name = os.path.splitext(os.path.basename(original_file_path))[0]
-            base_name = self._normalize_thumbnail_basename(base_name)
-            path_hash = self._thumbnail_identity_hash(original_file_path)
-
-            thumbnail_dir = self._resolve_thumbnail_cache_dir()
-
-            # Create directory if necessary
-            os.makedirs(thumbnail_dir, exist_ok=True)
-
-            thumbnail_path = os.path.join(
-                thumbnail_dir, f"{base_name}_{path_hash}_thumb.jpg"
+            thumbnail_result = self.thumbnail_service.create_thumbnail(
+                image_path=file_path,
+                size=None,
             )
-
-            # Save according to object type
-            if Image is not None and isinstance(thumbnail_obj, Image.Image):
-                pil_img = thumbnail_obj
-                # JPEG does not support alpha channels.
-                if pil_img.mode in ("RGBA", "LA", "P"):
-                    pil_img = pil_img.convert("RGB")
-                pil_img.save(thumbnail_path, "JPEG", quality=85)
-            elif hasattr(thumbnail_obj, "save"):
-                # QPixmap-like object
-                thumbnail_obj.save(thumbnail_path, "JPG", quality=85)
-            else:
-                self.logger.warning(
-                    f"Unsupported thumbnail type: {type(thumbnail_obj)}"
-                )
+            if not (
+                thumbnail_result
+                and hasattr(thumbnail_result, "success")
+                and thumbnail_result.success
+                and hasattr(thumbnail_result, "thumbnail")
+                and thumbnail_result.thumbnail is not None
+            ):
                 return None
 
-            return thumbnail_path
+            payload = self._thumbnail_to_png_bytes(thumbnail_result.thumbnail)
+            if payload is None:
+                return None
 
-        except Exception as e:
-            self.logger.error(f"Error saving thumbnail: {e}")
+            self.thumbnail_cache.set(file_path, payload)
+            pixmap = self._pixmap_from_png_bytes(payload)
+            if pixmap is not None:
+                self.thumbnail_generated.emit(file_path, "<omni-cache>")
+            return pixmap
+        except Exception as exc:
+            self.logger.warning(f"Error generating thumbnail for {file_path}: {exc}")
             return None
 
     @staticmethod
-    def _thumbnail_identity_hash(file_path: str) -> str:
-        """Return a short, stable hash for thumbnail file naming."""
-        import hashlib
+    def _thumbnail_to_png_bytes(thumbnail_obj: Any) -> Optional[bytes]:
+        """Convert thumbnail object (QPixmap or PIL Image) to PNG bytes."""
+        if isinstance(thumbnail_obj, QPixmap):
+            byte_array = QByteArray()
+            buffer = QBuffer(byte_array)
+            if not buffer.open(QIODevice.OpenModeFlag.WriteOnly):
+                return None
+            try:
+                if not thumbnail_obj.save(buffer, "PNG"):
+                    return None
+            finally:
+                buffer.close()
+            return bytes(byte_array)
 
-        return hashlib.md5(
-            file_path.encode("utf-8"), usedforsecurity=False
-        ).hexdigest()[:12]
+        if Image is not None and isinstance(thumbnail_obj, Image.Image):
+            buffer = BytesIO()
+            image = thumbnail_obj
+            if image.mode in ("RGBA", "LA", "P"):
+                image = image.convert("RGB")
+            image.save(buffer, "PNG")
+            return buffer.getvalue()
+
+        return None
+
+    @staticmethod
+    def _pixmap_from_png_bytes(payload: bytes) -> Optional[QPixmap]:
+        """Decode PNG bytes to QPixmap."""
+        pixmap = QPixmap()
+        if pixmap.loadFromData(payload, "PNG"):
+            return pixmap
+        return None
 
     @staticmethod
     def _resolve_thumbnail_cache_dir() -> str:
@@ -446,43 +468,6 @@ class FilePresenter(QObject):
             base_dir = os.getenv("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
 
         return os.path.join(base_dir, app_folder, "thumbnails")
-
-    @staticmethod
-    def _is_generated_thumbnail_file(file_path: str) -> bool:
-        """Return True if the path points to an app-generated thumbnail file."""
-        normalized = file_path.replace("\\", "/").lower()
-        if "/.thumbnails/" in normalized:
-            return True
-        filename = os.path.basename(file_path).lower()
-        name, _ = os.path.splitext(filename)
-        return name.endswith("_thumb")
-
-    @staticmethod
-    def _normalize_thumbnail_basename(base_name: str) -> str:
-        """Remove repeated _thumb suffixes from a base filename."""
-        normalized = base_name
-        while normalized.lower().endswith("_thumb"):
-            normalized = normalized[:-6]
-        return normalized or "thumbnail"
-
-    def _generate_fallback_thumbnail(self, file_path: str) -> Optional[str]:
-        """
-        Generates a simple fallback thumbnail.
-
-        Args:
-            file_path: Path to the file
-
-        Returns:
-            Path to the thumbnail or None
-        """
-        try:
-            # For now, return None
-            # A complete implementation could generate an icon based on the extension
-            return None
-
-        except Exception as e:
-            self.logger.warning(f"Error generating fallback thumbnail: {e}")
-            return None
 
     def handle_file_selection(self, file_path: str):
         """

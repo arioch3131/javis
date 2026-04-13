@@ -48,6 +48,7 @@ def mock_config_definitions():
                 category="image",
                 label="Thumbnail Size",
                 description="Description for Thumbnail Size",
+                validation_rules=[lambda value: (int(value) > 0, "must be positive")],
             ),
         }
     )
@@ -157,12 +158,36 @@ class TestConfigService:
                 ConfigKey.DOCUMENT_MODEL
             )  # Assuming DOCUMENT_MODEL is not in mock_config_definitions
 
+    def test_normalize_key_supports_string_value(self, config_service):
+        config_service.repo.get_value.return_value = "http://localhost:11434"
+        value = config_service.get(ConfigKey.API_URL.value)
+        assert value == "http://localhost:11434"
+
+    def test_normalize_key_rejects_empty_key(self, config_service):
+        with pytest.raises(ValueError, match="Invalid configuration key"):
+            config_service.get("")
+
+    def test_normalize_key_rejects_unknown_string(self, config_service):
+        with pytest.raises(ValueError, match="Invalid configuration key"):
+            config_service.get("unknown.setting")
+
+    def test_get_type_conversion_error_uses_default(
+        self, config_service, mock_config_repository
+    ):
+        mock_config_repository.get_value.return_value = "not-an-int"
+        value = config_service.get(ConfigKey.THUMBNAIL_SIZE)
+        assert value == 128
+
     def test_set_value(self, config_service, mock_config_repository):
         config_service.set(ConfigKey.API_URL, "new_url")
         mock_config_repository.set_value.assert_called_once_with(
             ConfigKey.API_URL.value, "new_url"
         )
         assert config_service._cache.get(ConfigKey.API_URL.value) == "new_url"
+
+    def test_set_raises_for_missing_definition(self, config_service):
+        with pytest.raises(ValueError, match="Invalid configuration key"):
+            config_service.set(ConfigKey.DOCUMENT_MODEL, "missing")
 
     def test_set_list_value(self, config_service, mock_config_repository):
         config_service.set(ConfigKey.CATEGORIES, ["new_cat1", "new_cat2"])
@@ -196,3 +221,49 @@ class TestConfigService:
         # Ensure cache is populated
         assert config_service._cache.get(ConfigKey.API_URL.value) == "http://test.com"
         assert config_service._cache.get(ConfigKey.CATEGORIES.value) == ["catA", "catB"]
+
+    def test_get_invalid_value_uses_default_with_validation(
+        self, config_service, mock_config_repository
+    ):
+        mock_config_repository.get_value.return_value = "-10"
+
+        value = config_service.get(ConfigKey.THUMBNAIL_SIZE)
+
+        assert value == 128
+        assert config_service._cache.get(ConfigKey.THUMBNAIL_SIZE.value) == 128
+
+    def test_set_invalid_value_uses_default_with_validation(
+        self, config_service, mock_config_repository
+    ):
+        config_service.set(ConfigKey.THUMBNAIL_SIZE, -12)
+
+        mock_config_repository.set_value.assert_called_once_with(
+            ConfigKey.THUMBNAIL_SIZE.value, "128"
+        )
+        assert config_service._cache.get(ConfigKey.THUMBNAIL_SIZE.value) == 128
+
+    def test_validate_or_fallback_returns_value_when_definition_missing(
+        self, config_service
+    ):
+        assert (
+            config_service._validate_or_fallback(ConfigKey.DOCUMENT_MODEL, "x", "d")
+            == "x"
+        )
+
+    def test_validate_or_fallback_uses_default_when_rule_raises(
+        self, config_service, mock_config_repository
+    ):
+        original_rules = CONFIG_DEFINITIONS[ConfigKey.THUMBNAIL_SIZE].validation_rules
+        CONFIG_DEFINITIONS[ConfigKey.THUMBNAIL_SIZE].validation_rules = [
+            lambda _value: (_ for _ in ()).throw(RuntimeError("boom"))
+        ]
+        try:
+            config_service.set(ConfigKey.THUMBNAIL_SIZE, 256)
+        finally:
+            CONFIG_DEFINITIONS[
+                ConfigKey.THUMBNAIL_SIZE
+            ].validation_rules = original_rules
+
+        mock_config_repository.set_value.assert_called_once_with(
+            ConfigKey.THUMBNAIL_SIZE.value, "128"
+        )

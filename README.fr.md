@@ -140,6 +140,27 @@ Pour ajouter une traduction :
 
 ---
 
+## Parametres du Cache Thumbnail
+
+Le comportement du cache disque des thumbnails est configurable dans Parametres (onglet Thumbnails) :
+
+- `thumbnails.cache.enabled` (defaut : `true`)
+- `thumbnails.cache.ttl_sec` (defaut : `3600`)
+- `thumbnails.cache.cleanup_interval_sec` (defaut : `300`)
+- `thumbnails.cache.max_size_mb` (defaut : `1024`)
+- `thumbnails.cache.renew_on_hit` (defaut : `false`)
+- `thumbnails.cache.renew_threshold` (defaut : `0.5`)
+
+Note de compatibilite :
+- Avec `omni-cache 2.0.0`, `max_size` est ignore proprement.
+- Avec `omni-cache 2.1.0+`, `max_size` est active automatiquement.
+
+Vous pouvez purger le cache depuis :
+- `Tools > Database > Clear Thumbnail Cache`
+- Parametres > Thumbnails > `Clear Thumbnail Cache`
+
+---
+
 ## Licence
 
 GPL-3.0-only

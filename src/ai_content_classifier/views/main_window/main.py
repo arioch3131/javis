@@ -188,6 +188,10 @@ class MainWindow(QMainWindow, ThemeMixin):
             self.handle_remove_filtered_results_request = (
                 self._default_remove_filtered_db_handler
             )
+        if not hasattr(self, "handle_clear_thumbnail_cache_request"):
+            self.handle_clear_thumbnail_cache_request = (
+                self._default_clear_thumbnail_cache_handler
+            )
 
         if not hasattr(self, "handle_categorization_request"):
             self.handle_categorization_request = self._default_categorization_handler
@@ -231,6 +235,10 @@ class MainWindow(QMainWindow, ThemeMixin):
     def _default_remove_filtered_db_handler(self):
         """Default handler for removing displayed results from the database."""
         self.logger.debug("Default remove filtered database handler called")
+
+    def _default_clear_thumbnail_cache_handler(self):
+        """Default handler for clearing thumbnail cache."""
+        self.logger.debug("Default clear thumbnail cache handler called")
 
     def _default_about_handler(self):
         """Default handler for About."""

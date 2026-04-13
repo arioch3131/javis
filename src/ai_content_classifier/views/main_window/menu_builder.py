@@ -270,6 +270,11 @@ class MenuBuilder(LoggableMixin):
                 "tooltip": "Clear all data from the content database",
             },
             {
+                "id": "tools_clear_thumbnail_cache",
+                "text": "🧼 Clear Thumbnail &Cache",
+                "tooltip": "Clear generated thumbnail disk cache",
+            },
+            {
                 "id": "tools_remove_filtered_db",
                 "text": "🧹 Remove &Filtered Results from Database",
                 "tooltip": "Remove only the currently displayed filtered results from the content database",
@@ -516,6 +521,7 @@ class MenuBuilder(LoggableMixin):
         # Database submenu
         db_menu = menu.addMenu(tr("menus.database", "🗄️ &Database"))
         db_menu.addAction(self.actions["tools_clear_db"])
+        db_menu.addAction(self.actions["tools_clear_thumbnail_cache"])
         db_menu.addAction(self.actions["tools_remove_filtered_db"])
         db_menu.addAction(self.actions["tools_compact_db"])
 
@@ -774,6 +780,7 @@ class MenuBuilder(LoggableMixin):
             "tools_categorize": "handle_categorization_request",
             "tools_organize": "handle_auto_organize_request",
             "tools_clear_db": "handle_clear_db_request",
+            "tools_clear_thumbnail_cache": "handle_clear_thumbnail_cache_request",
             "tools_remove_filtered_db": "handle_remove_filtered_results_request",
             "tools_settings": "handle_settings_request",
             "file_exit": "close",

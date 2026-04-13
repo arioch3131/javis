@@ -29,6 +29,7 @@ from ai_content_classifier.services.database.content_database_service import (
 from ai_content_classifier.models.content_models import ContentItem
 from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
+from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
 from ai_content_classifier.services.thumbnail.thumbnail_service import ThumbnailService
 
 
@@ -416,7 +417,16 @@ class FileOperationService(LoggableMixin):
         )
 
     def clear_thumbnail_disk_cache(self) -> None:
-        """Remove all generated thumbnail files from disk cache."""
+        """Clear thumbnail cache through omni-cache DISK adapter when available."""
+        runtime = get_cache_runtime()
+        try:
+            if runtime.clear(adapter="thumbnail_disk"):
+                self.logger.info("Thumbnail DISK adapter cache cleared successfully.")
+                return
+        except Exception as e:
+            self.logger.debug(f"thumbnail_disk clear via runtime failed: {e}")
+
+        # Fallback path for environments without registered adapter.
         thumbnail_cache_dir = self._resolve_thumbnail_cache_dir()
         if not os.path.isdir(thumbnail_cache_dir):
             self.logger.debug(
@@ -428,7 +438,7 @@ class FileOperationService(LoggableMixin):
             shutil.rmtree(thumbnail_cache_dir)
             os.makedirs(thumbnail_cache_dir, exist_ok=True)
             self.logger.info(
-                f"Thumbnail disk cache cleared successfully: {thumbnail_cache_dir}"
+                f"Thumbnail disk cache cleared via filesystem fallback: {thumbnail_cache_dir}"
             )
         except Exception as e:
             self.logger.warning(f"Unable to clear thumbnail disk cache: {e}")

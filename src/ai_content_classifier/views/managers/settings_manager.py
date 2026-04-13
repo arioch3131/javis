@@ -58,8 +58,16 @@ class SettingsManager(QObject):
         """Opens the settings dialog."""
         try:
             self.logger.info("Opening settings dialog")
+            clear_thumbnail_cb = None
+            if parent_window and hasattr(
+                parent_window, "handle_clear_thumbnail_cache_request"
+            ):
+                clear_thumbnail_cb = parent_window.handle_clear_thumbnail_cache_request
             dialog = SettingsView(
-                self.config_service, self.llm_controller, parent_window
+                self.config_service,
+                self.llm_controller,
+                parent_window,
+                on_clear_thumbnail_cache=clear_thumbnail_cb,
             )
             dialog.setModal(True)
 
