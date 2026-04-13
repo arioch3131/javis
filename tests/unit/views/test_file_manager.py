@@ -227,6 +227,18 @@ def test_refresh_and_emit_visible_files_emits_refreshed_list_when_no_filters():
     manager.files_updated.emit.assert_called_once_with([("/tmp/a.png", "/tmp")])
 
 
+def test_clear_thumbnail_cache_delegates_to_services():
+    manager = FileManager.__new__(FileManager)
+    manager.logger = MagicMock()
+    manager.file_service = MagicMock()
+    manager.file_service.thumbnail_service = MagicMock()
+
+    manager.clear_thumbnail_cache()
+
+    manager.file_service.clear_thumbnail_disk_cache.assert_called_once()
+    manager.file_service.thumbnail_service.clear_cache.assert_called_once()
+
+
 def test_refresh_and_emit_visible_files_reapplies_filters_when_active():
     manager = FileManager.__new__(FileManager)
     manager.file_service = MagicMock()

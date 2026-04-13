@@ -1,7 +1,6 @@
-import os
-from pathlib import Path
 from unittest.mock import MagicMock
 
+from ai_content_classifier.models.config_models import ConfigKey
 from ai_content_classifier.views.presenters.file_presenter import FilePresenter
 
 
@@ -60,29 +59,6 @@ def test_build_file_details_falls_back_to_metadata_confidence():
     details = presenter._build_file_details("/tmp/red-panda.jpg")
 
     assert details["classification"]["confidence"] == 0.64
-
-
-def test_save_thumbnail_uses_centralized_cache_directory(tmp_path, monkeypatch):
-    class _DummyThumbnail:
-        def save(self, output_path: str, *_args, **_kwargs):
-            Path(output_path).write_bytes(b"thumb")
-            return True
-
-    cache_root = tmp_path / "cache-root"
-    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_root))
-
-    source_dir = tmp_path / "images"
-    source_dir.mkdir(parents=True)
-    source_path = source_dir / "photo.jpg"
-    source_path.write_bytes(b"source")
-
-    presenter = FilePresenter(MagicMock(), MagicMock())
-    output_path = presenter._save_thumbnail_to_disk(_DummyThumbnail(), str(source_path))
-
-    assert output_path is not None
-    assert os.path.exists(output_path)
-    assert f"{os.sep}.thumbnails{os.sep}" not in output_path
-    assert str(cache_root / "Javis" / "thumbnails") in output_path
 
 
 def test_clear_category_request_updates_db_details_and_visible_files():
@@ -164,3 +140,81 @@ def test_build_file_data_batches_when_input_is_large():
 
     assert len(file_data) == 1205
     assert presenter.db_service.find_items.call_count == 2
+
+
+def test_file_presenter_registers_disk_adapter_from_settings(monkeypatch):
+    runtime = MagicMock()
+    runtime.register_thumbnail_disk_adapter.return_value = True
+    cache_handle = MagicMock()
+    runtime.memory_cache.return_value = cache_handle
+
+    monkeypatch.setattr(
+        "ai_content_classifier.views.presenters.file_presenter.get_cache_runtime",
+        lambda: runtime,
+    )
+
+    config_service = MagicMock()
+    config_values = {
+        ConfigKey.THUMBNAIL_CACHE_ENABLED: True,
+        ConfigKey.THUMBNAIL_CACHE_TTL_SEC: 1200,
+        ConfigKey.THUMBNAIL_CACHE_CLEANUP_INTERVAL_SEC: 45,
+        ConfigKey.THUMBNAIL_CACHE_MAX_SIZE_MB: 512,
+        ConfigKey.THUMBNAIL_CACHE_RENEW_ON_HIT: True,
+        ConfigKey.THUMBNAIL_CACHE_RENEW_THRESHOLD: 0.75,
+    }
+    config_service.get.side_effect = lambda key: config_values[key]
+
+    presenter = FilePresenter(MagicMock(), MagicMock(), config_service=config_service)
+
+    assert presenter.thumbnail_cache is cache_handle
+    runtime.register_thumbnail_disk_adapter.assert_called_once()
+    runtime.memory_cache.assert_called_once()
+    assert runtime.memory_cache.call_args.kwargs["adapter"] == "thumbnail_disk"
+
+
+def test_get_or_create_thumbnail_pixmap_uses_cached_payload(monkeypatch):
+    presenter = FilePresenter(MagicMock(), MagicMock())
+    payload = b"png-bytes"
+    sentinel_pixmap = object()
+
+    presenter.thumbnail_cache.get = MagicMock(return_value=payload)
+    presenter._pixmap_from_png_bytes = MagicMock(return_value=sentinel_pixmap)
+    monkeypatch.setattr(
+        "ai_content_classifier.views.presenters.file_presenter.is_image_file",
+        lambda _path: True,
+    )
+    monkeypatch.setattr(
+        "ai_content_classifier.views.presenters.file_presenter.os.path.exists",
+        lambda _path: True,
+    )
+
+    out = presenter.get_or_create_thumbnail_pixmap("/tmp/example.jpg")
+    assert out is sentinel_pixmap
+    presenter._pixmap_from_png_bytes.assert_called_once_with(payload)
+
+
+def test_get_or_create_thumbnail_pixmap_generates_and_stores_bytes(monkeypatch):
+    presenter = FilePresenter(MagicMock(), MagicMock())
+    sentinel_pixmap = object()
+    presenter.thumbnail_cache.get = MagicMock(return_value=None)
+    presenter.thumbnail_cache.set = MagicMock(return_value=True)
+    presenter._thumbnail_to_png_bytes = MagicMock(return_value=b"generated-png")
+    presenter._pixmap_from_png_bytes = MagicMock(return_value=sentinel_pixmap)
+    presenter.thumbnail_service = MagicMock()
+    presenter.thumbnail_service.create_thumbnail.return_value = MagicMock(
+        success=True,
+        thumbnail=object(),
+    )
+    monkeypatch.setattr(
+        "ai_content_classifier.views.presenters.file_presenter.is_image_file",
+        lambda _path: True,
+    )
+    monkeypatch.setattr(
+        "ai_content_classifier.views.presenters.file_presenter.os.path.exists",
+        lambda _path: True,
+    )
+
+    out = presenter.get_or_create_thumbnail_pixmap("/tmp/new.jpg")
+    assert out is sentinel_pixmap
+    presenter.thumbnail_cache.set.assert_called_once()
+    assert isinstance(presenter.thumbnail_cache.set.call_args.args[1], bytes)

@@ -412,6 +412,77 @@ CategorizationController -> LLMController -> LLMService
 - configuration ;
 - base de données.
 
+### 8.6 Intégration cache_runtime et omni-cache
+
+La V1 utilise un wrapper runtime unique autour de `omni-cache` :
+
+- [OmniCacheRuntime](../src/ai_content_classifier/services/shared/cache_runtime.py)
+- accès singleton via `get_cache_runtime()`
+- fallback propre si `omni-cache` n'est pas disponible
+
+Ce runtime est volontairement transverse à plusieurs modules, pas uniquement aux thumbnails.
+
+#### 8.6.1 Adapters utilisés dans le projet
+
+1. `memory` (key/value)
+- adapter par défaut pour la majorité des caches applicatifs courte durée
+- utilisé via `runtime.get/set/delete(..., adapter="memory")` ou `runtime.memory_cache(...)`
+
+2. `thumbnail_disk` (DISK key/value)
+- enregistré par `FilePresenter` via `register_thumbnail_disk_adapter(...)`
+- stocke les payloads de thumbnails avec TTL/cleanup gérés par le backend
+- stratégie de version :
+  - `omni-cache 2.0.0` : `max_size` ignoré
+  - `omni-cache 2.1.0+` : `max_size` activé automatiquement
+
+3. Adapters SmartPool
+- enregistrés via `register_smartpool_adapter(...)`
+- utilisés pour le pooling d'objets (pas du key/value simple)
+- exemples :
+  - pools mémoire/objets de `ThumbnailService` via `SmartPoolHandle`
+  - pool pixmap grille (`thumbnail_grid_qpixmap_*`) dans [grid_core.py](../src/ai_content_classifier/views/widgets/grid/grid_core.py)
+
+#### 8.6.2 Caches namespacés actuellement utilisés
+
+Exemples de namespaces actifs :
+
+- `settings:config_service`
+- `shared:dependency_manager:availability`
+- `llm:classification`
+- `llm:model_manager:models`
+- `llm:model_manager:api_urls`
+- `metadata:entries`
+- `preprocessing:text_extraction`
+- `categorization:duplicate_hash_reuse`
+- `ui:file_presenter:thumbnails` (adossé à `thumbnail_disk` quand activé)
+
+Cela isole les clés et statistiques par module tout en partageant un runtime unique.
+
+#### 8.6.3 Pourquoi ce pattern d'intégration
+
+La couche runtime apporte :
+
+- une API stable pour les services (`memory_cache`, `get/set/delete/clear`)
+- un point central d'enregistrement des adapters
+- une sémantique de fallback cohérente
+- une migration simplifiée des capacités backend (`2.0.0 -> 2.1.0+`) sans changer les APIs des modules
+
+#### 8.6.4 Flux opérationnel (exemple thumbnail)
+
+```mermaid
+flowchart LR
+    A[FilePresenter] --> B[get_cache_runtime]
+    B --> C[register_thumbnail_disk_adapter]
+    C --> D[adapter DISK omni-cache]
+    A --> E[NamespacedMemoryCache ui:file_presenter:thumbnails]
+    E --> D
+    F[action purge cache Tools/Settings] --> G[FileOperationService.clear_thumbnail_disk_cache]
+    G --> H[runtime.clear adapter=thumbnail_disk]
+```
+
+Point clé V1.3 :
+- TTL et nettoyage périodique sont délégués au backend DISK de `omni-cache` pour les entrées de cache thumbnails.
+
 ## 9. Flux principaux de la V1
 
 ### 9.1 Démarrage
@@ -487,4 +558,3 @@ Pour la V1, ces points sont acceptables tant que le flux global reste :
 ```text
 View -> Handler / Manager / Controller -> Service -> Repository -> Model
 ```
-

@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+import types
 
 from ai_content_classifier.services.shared.cache_runtime import (
     NamespacedMemoryCache,
@@ -124,3 +125,91 @@ def test_smartpool_handle_acquire_release_shutdown_and_default_stats():
 
     handle.shutdown()
     runtime.manager.remove_adapter.assert_called_once_with("pool")
+
+
+def test_register_thumbnail_disk_adapter_skips_max_size_when_unsupported(monkeypatch):
+    runtime = OmniCacheRuntime()
+    manager = MagicMock()
+    manager.list_adapters.return_value = []
+    manager.register_adapter.return_value = True
+    runtime._initialized = True
+    runtime._manager = manager
+
+    captured = {}
+
+    class _CacheBackend:
+        DISK = "disk"
+
+    def _create_adapter(backend, config):
+        captured["backend"] = backend
+        captured["config"] = config
+        return {"backend": backend, "config": config}
+
+    monkeypatch.setattr(
+        "ai_content_classifier.services.shared.cache_runtime.metadata.version",
+        lambda _pkg: "2.0.0",
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "omni_cache",
+        types.SimpleNamespace(
+            CacheBackend=_CacheBackend, create_adapter=_create_adapter
+        ),
+    )
+
+    ok = runtime.register_thumbnail_disk_adapter(
+        name="thumbnail_disk",
+        cache_dir="/tmp/thumb",
+        default_ttl=60,
+        cleanup_interval_sec=30,
+        renew_on_hit=False,
+        renew_threshold=0.5,
+        max_size_mb=128,
+    )
+
+    assert ok is True
+    assert captured["backend"] == _CacheBackend.DISK
+    assert "max_size" not in captured["config"]
+
+
+def test_register_thumbnail_disk_adapter_sets_max_size_when_supported(monkeypatch):
+    runtime = OmniCacheRuntime()
+    manager = MagicMock()
+    manager.list_adapters.return_value = []
+    manager.register_adapter.return_value = True
+    runtime._initialized = True
+    runtime._manager = manager
+
+    captured = {}
+
+    class _CacheBackend:
+        DISK = "disk"
+
+    def _create_adapter(backend, config):
+        captured["config"] = config
+        return {"backend": backend, "config": config}
+
+    monkeypatch.setattr(
+        "ai_content_classifier.services.shared.cache_runtime.metadata.version",
+        lambda _pkg: "2.1.0",
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "omni_cache",
+        types.SimpleNamespace(
+            CacheBackend=_CacheBackend, create_adapter=_create_adapter
+        ),
+    )
+
+    ok = runtime.register_thumbnail_disk_adapter(
+        name="thumbnail_disk",
+        cache_dir="/tmp/thumb",
+        default_ttl=60,
+        cleanup_interval_sec=30,
+        renew_on_hit=True,
+        renew_threshold=0.7,
+        max_size_mb=256,
+    )
+
+    assert ok is True
+    assert captured["config"]["max_size"] == 256 * 1024 * 1024

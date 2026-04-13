@@ -421,7 +421,7 @@ class UIEventHandler(QObject):
     def handle_settings_request(self):
         """Handles opening the settings."""
         self.logger.info("Opening settings")
-        self.settings_manager.open_settings_dialog()
+        self.settings_manager.open_settings_dialog(self.main_window)
 
     def handle_filter_change(self, filter_type: str):
         """Handles filter change."""

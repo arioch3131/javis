@@ -95,6 +95,7 @@ class ConfigService(LoggableMixin):
             )
             value = definition.default
 
+        value = self._validate_or_fallback(key, value, definition.default)
         self._cache.set(key.value, value)
         return value
 
@@ -105,6 +106,8 @@ class ConfigService(LoggableMixin):
         if not definition:
             raise ValueError(f"Invalid configuration key: {key}")
 
+        value = self._validate_or_fallback(key, value, definition.default)
+
         # Convert list to comma-separated string for storage
         if isinstance(value, list):
             value_to_store = ",".join(map(str, value))
@@ -114,6 +117,29 @@ class ConfigService(LoggableMixin):
         self.repo.set_value(key.value, value_to_store)
         self._cache.set(key.value, value)
         self.logger.info(f"Configuration updated: {key.value} = {value}")
+
+    def _validate_or_fallback(self, key: ConfigKey, value: Any, default: Any) -> Any:
+        """Validate config value against key rules and fallback safely if invalid."""
+        definition = CONFIG_DEFINITIONS.get(key)
+        if not definition:
+            return value
+
+        for rule in definition.validation_rules:
+            try:
+                is_valid, message = rule(value)
+            except Exception as exc:
+                self.logger.warning(
+                    f"Validation raised for {key.value}, using default: {exc}"
+                )
+                return default
+
+            if not is_valid:
+                self.logger.warning(
+                    f"Invalid value for {key.value}: {value!r}. {message}. Using default {default!r}."
+                )
+                return default
+
+        return value
 
     def get_all_settings(self) -> Dict[str, Any]:
         """Retrieves all settings, organized by category."""

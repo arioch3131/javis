@@ -177,6 +177,25 @@ class SmartPoolPixmapCache:
         self._evict_if_needed()
         return target
 
+    def put(self, key: str, source: QPixmap) -> Optional[QPixmap]:
+        """Insert a source pixmap in cache and return cached square rendition."""
+        if source.isNull():
+            return None
+
+        cached = self.get(key)
+        if cached is not None:
+            return cached
+
+        target, from_pool = self._acquire_pixmap()
+        self._render_thumbnail(target, source)
+
+        size_bytes = self._estimate_size(target)
+        self._entries[key] = (target, size_bytes, from_pool)
+        self.current_memory += size_bytes
+        self._entries.move_to_end(key)
+        self._evict_if_needed()
+        return target
+
     def clear(self) -> None:
         for pixmap, _, from_pool in self._entries.values():
             self._release_pooled_pixmap(pixmap, from_pool)
@@ -579,10 +598,16 @@ class UltraOptimizedThumbnailGrid(QWidget):
             self.generation_workers.append(worker)
             worker.start()
 
-    @pyqtSlot(str, str)
-    def on_thumbnail_ready_optimized(self, file_path: str, thumbnail_path: str):
+    @pyqtSlot(str, object)
+    def on_thumbnail_ready_optimized(self, file_path: str, thumbnail_payload: object):
         """Load and cache pixmaps on the UI thread."""
-        pixmap = self.thumbnail_cache.get_or_load(file_path, thumbnail_path)
+        if isinstance(thumbnail_payload, QPixmap):
+            pixmap = self.thumbnail_cache.put(file_path, thumbnail_payload)
+        elif isinstance(thumbnail_payload, str):
+            pixmap = self.thumbnail_cache.get_or_load(file_path, thumbnail_payload)
+        else:
+            pixmap = None
+
         if pixmap is None:
             return
 

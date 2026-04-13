@@ -13,6 +13,23 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
+def _validate_positive_int(value: Any) -> Tuple[bool, str]:
+    """Validate strictly positive integer values."""
+    try:
+        return (int(value) > 0, "Value must be greater than 0")
+    except (TypeError, ValueError):
+        return False, "Value must be an integer"
+
+
+def _validate_renew_threshold(value: Any) -> Tuple[bool, str]:
+    """Validate threshold value in (0, 1]."""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return False, "Value must be a number"
+    return (0.0 < numeric <= 1.0, "Value must be in (0, 1]")
+
+
 # Enum for configuration parameter keys
 class ConfigKey(Enum):
     """Enumeration of all configurable keys in the application."""
@@ -49,6 +66,12 @@ class ConfigKey(Enum):
     # --- Thumbnail Settings ---
     THUMBNAIL_SIZE = "thumbnails.size"
     THUMBNAIL_QUALITY = "thumbnails.quality"
+    THUMBNAIL_CACHE_ENABLED = "thumbnails.cache.enabled"
+    THUMBNAIL_CACHE_TTL_SEC = "thumbnails.cache.ttl_sec"
+    THUMBNAIL_CACHE_CLEANUP_INTERVAL_SEC = "thumbnails.cache.cleanup_interval_sec"
+    THUMBNAIL_CACHE_MAX_SIZE_MB = "thumbnails.cache.max_size_mb"
+    THUMBNAIL_CACHE_RENEW_ON_HIT = "thumbnails.cache.renew_on_hit"
+    THUMBNAIL_CACHE_RENEW_THRESHOLD = "thumbnails.cache.renew_threshold"
 
     # --- Categorization Settings ---
     CATEGORIES = "categorization.categories"
@@ -249,6 +272,58 @@ CONFIG_DEFINITIONS: Dict[ConfigKey, ConfigDefinition] = {
         category="Thumbnails",
         label="Thumbnail Quality",
         description="JPEG quality (1-100) for generated thumbnails.",
+    ),
+    ConfigKey.THUMBNAIL_CACHE_ENABLED: ConfigDefinition(
+        key=ConfigKey.THUMBNAIL_CACHE_ENABLED,
+        type=bool,
+        default=True,
+        category="Thumbnails",
+        label="Enable Thumbnail Disk Cache",
+        description="Enable persistent disk cache for generated thumbnails.",
+    ),
+    ConfigKey.THUMBNAIL_CACHE_TTL_SEC: ConfigDefinition(
+        key=ConfigKey.THUMBNAIL_CACHE_TTL_SEC,
+        type=int,
+        default=3600,
+        category="Thumbnails",
+        label="Thumbnail Cache TTL (s)",
+        description="Default time-to-live (in seconds) for thumbnail cache entries.",
+        validation_rules=[_validate_positive_int],
+    ),
+    ConfigKey.THUMBNAIL_CACHE_CLEANUP_INTERVAL_SEC: ConfigDefinition(
+        key=ConfigKey.THUMBNAIL_CACHE_CLEANUP_INTERVAL_SEC,
+        type=int,
+        default=300,
+        category="Thumbnails",
+        label="Thumbnail Cache Cleanup Interval (s)",
+        description="Background cleanup interval (in seconds) for thumbnail cache.",
+        validation_rules=[_validate_positive_int],
+    ),
+    ConfigKey.THUMBNAIL_CACHE_MAX_SIZE_MB: ConfigDefinition(
+        key=ConfigKey.THUMBNAIL_CACHE_MAX_SIZE_MB,
+        type=int,
+        default=1024,
+        category="Thumbnails",
+        label="Thumbnail Cache Max Size (MB)",
+        description="Maximum disk cache size in MB (enabled automatically on omni-cache >= 2.1.0).",
+        validation_rules=[_validate_positive_int],
+    ),
+    ConfigKey.THUMBNAIL_CACHE_RENEW_ON_HIT: ConfigDefinition(
+        key=ConfigKey.THUMBNAIL_CACHE_RENEW_ON_HIT,
+        type=bool,
+        default=False,
+        category="Thumbnails",
+        label="Renew TTL On Cache Hit",
+        description="Extend cache entry TTL when an entry is read.",
+    ),
+    ConfigKey.THUMBNAIL_CACHE_RENEW_THRESHOLD: ConfigDefinition(
+        key=ConfigKey.THUMBNAIL_CACHE_RENEW_THRESHOLD,
+        type=float,
+        default=0.5,
+        category="Thumbnails",
+        label="Renew Threshold",
+        description="TTL renew threshold ratio in (0, 1].",
+        validation_rules=[_validate_renew_threshold],
     ),
     # --- Categorization Settings ---
     ConfigKey.CATEGORIES: ConfigDefinition(

@@ -9,6 +9,7 @@ installed.
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib import metadata
 from threading import RLock
 from typing import Any, Generic, Set, TypeVar
 
@@ -28,6 +29,7 @@ class OmniCacheRuntime(LoggableMixin):
         self._namespace_state_lock = RLock()
         self._namespace_keys: dict[tuple[str, str], Set[str]] = {}
         self._namespace_stats: dict[tuple[str, str], dict[str, int]] = {}
+        self._registered_disk_adapters: Set[str] = set()
 
     def _initialize(self) -> None:
         with self._lock:
@@ -162,6 +164,111 @@ class OmniCacheRuntime(LoggableMixin):
                 "Failed to register smartpool adapter '%s': %s", name, exc
             )
             return False
+
+    @staticmethod
+    def _parse_version(version_str: str) -> tuple[int, int, int]:
+        """Parse semantic-ish version safely for comparison."""
+        parts = [0, 0, 0]
+        for idx, chunk in enumerate(version_str.split(".")[:3]):
+            digits = "".join(ch for ch in chunk if ch.isdigit())
+            if digits:
+                parts[idx] = int(digits)
+        return tuple(parts)  # type: ignore[return-value]
+
+    def _supports_disk_max_size(self) -> bool:
+        """
+        Return True when omni-cache DISK backend supports max_size.
+
+        Strategy:
+        - native support starts at 2.1.0
+        - missing/unreadable version falls back to False.
+        """
+        try:
+            version = metadata.version("omni-cache")
+        except Exception:
+            try:
+                version = metadata.version("omni_cache")
+            except Exception:
+                return False
+        return self._parse_version(version) >= (2, 1, 0)
+
+    def register_thumbnail_disk_adapter(
+        self,
+        *,
+        name: str,
+        cache_dir: str,
+        default_ttl: int | float,
+        cleanup_interval_sec: int,
+        renew_on_hit: bool = False,
+        renew_threshold: float = 0.5,
+        max_size_mb: int | None = None,
+        sqlite_path: str | None = None,
+    ) -> bool:
+        """
+        Register a DISK cache adapter for thumbnails (idempotent).
+
+        Compatible behavior:
+        - omni-cache 2.0.0: ignore max_size
+        - omni-cache 2.1.0+: set max_size automatically when provided.
+        """
+        mgr = self.manager
+        if mgr is None:
+            return False
+
+        with self._lock:
+            if name in self._registered_disk_adapters:
+                return True
+
+            try:
+                adapters = set(mgr.list_adapters())
+            except Exception:
+                adapters = set()
+
+            if name in adapters:
+                self._registered_disk_adapters.add(name)
+                self.logger.debug("Thumbnail DISK adapter already registered: %s", name)
+                return True
+
+            try:
+                from omni_cache import CacheBackend, create_adapter
+
+                disk_config: dict[str, Any] = {
+                    "name": name,
+                    "cache_dir": cache_dir,
+                    "default_ttl": max(1, int(default_ttl)),
+                    "cleanup_interval_sec": max(1, int(cleanup_interval_sec)),
+                    "renew_on_hit": bool(renew_on_hit),
+                    "renew_threshold": float(renew_threshold),
+                }
+                if sqlite_path:
+                    disk_config["sqlite_path"] = sqlite_path
+
+                supports_max_size = self._supports_disk_max_size()
+                if max_size_mb is not None and max_size_mb > 0 and supports_max_size:
+                    disk_config["max_size"] = int(max_size_mb) * 1024 * 1024
+                elif (
+                    max_size_mb is not None
+                    and max_size_mb > 0
+                    and not supports_max_size
+                ):
+                    self.logger.debug(
+                        "Skipping thumbnail DISK max_size for adapter '%s': backend version does not support it (<2.1.0)",
+                        name,
+                    )
+
+                adapter = create_adapter(CacheBackend.DISK, disk_config)
+                registered = bool(mgr.register_adapter(name, adapter))
+                if registered:
+                    self._registered_disk_adapters.add(name)
+                    self.logger.info(
+                        "Registered thumbnail DISK adapter '%s' at %s", name, cache_dir
+                    )
+                return registered
+            except Exception as exc:
+                self.logger.warning(
+                    "Failed to register thumbnail DISK adapter '%s': %s", name, exc
+                )
+                return False
 
     def get_namespace_state(
         self, namespace: str, adapter: str

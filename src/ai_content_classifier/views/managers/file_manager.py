@@ -1113,6 +1113,16 @@ class FileManager(QObject):
             self.logger.error(f"Error clearing content database: {e}")
             self.scan_error.emit(f"Error clearing content database: {e}")
 
+    def clear_thumbnail_cache(self):
+        """Clears thumbnail-related caches (disk + in-memory service cache)."""
+        self.logger.info("Clearing thumbnail cache...")
+        if hasattr(self.file_service, "clear_thumbnail_disk_cache"):
+            self.file_service.clear_thumbnail_disk_cache()
+        if hasattr(self.file_service, "thumbnail_service") and hasattr(
+            self.file_service.thumbnail_service, "clear_cache"
+        ):
+            self.file_service.thumbnail_service.clear_cache()
+
     def remove_files_from_database(self, file_paths: List[str]) -> int:
         """Removes only the provided files from the content database."""
         self.logger.info(
