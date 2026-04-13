@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-13
+
+### Added
+- Centralized file-type helpers in `FileTypeService` (extension normalization, longest-match extension detection, content-type resolution, text-like detection, text format mapping).
+- Added cross-module consistency tests for file type handling (`tests/unit/services/file/test_file_type_cross_module_consistency.py`).
+- Expanded `FileTypeService` unit coverage for normalization/content-type/text-format behaviors.
+
+### Changed
+- Refactored scan, categorization, LLM, metadata extraction, text extraction, and thumbnail utilities to reuse `FileTypeService` instead of maintaining duplicated extension lists.
+- Updated Windows release workflow to `softprops/action-gh-release@v3`.
+- Updated tooling dependencies (`setuptools>=82.0.1`, `pytest==9.0.3`).
+
+### Fixed
+- Improved cross-module consistency for image/document detection and content-type assignment.
+- Restored a clean `ruff check` state by fixing lint issues in examples and tests.
+
 ## [1.1.0] - 2026-04-12
 
 ### Changed

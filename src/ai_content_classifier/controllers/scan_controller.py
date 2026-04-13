@@ -10,6 +10,7 @@ from ai_content_classifier.services.metadata.metadata_service import MetadataSer
 from ai_content_classifier.services.file.scan_pipeline_service import (
     ScanPipelineService,
 )
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.file.scanners.local_filesystem_scanner import (
     LocalFilesystemScanner,
 )
@@ -192,24 +193,7 @@ class ScanController(QObject):
 
     def _normalize_extensions(self, extensions) -> list[str]:
         """Normalizes extension values to lowercase '.ext' strings."""
-        normalized: list[str] = []
-        if not extensions:
-            return normalized
-
-        if isinstance(extensions, str):
-            raw_values = [v.strip() for v in extensions.split(",") if v.strip()]
-        else:
-            raw_values = list(extensions)
-
-        for ext in raw_values:
-            ext_str = str(ext).strip().lower()
-            if not ext_str:
-                continue
-            if not ext_str.startswith("."):
-                ext_str = f".{ext_str}"
-            normalized.append(ext_str)
-
-        return normalized
+        return sorted(FileTypeService.normalize_extensions(extensions))
 
     def _build_allowed_extensions(self) -> list[str]:
         """Builds allowed extensions from scan config and global settings."""

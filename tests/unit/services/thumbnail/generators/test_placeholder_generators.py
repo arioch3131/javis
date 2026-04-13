@@ -83,11 +83,6 @@ class TestQtAvailability:
         """Test that actually executes lines 11-12 of the real module."""
         from unittest.mock import Mock
 
-        # Store the current state
-        module_name = (
-            "ai_content_classifier.services.thumbnail.generators.placeholder_generators"
-        )
-
         # Import the module first if not already imported
         import ai_content_classifier.services.thumbnail.generators.placeholder_generators as target_module
 
@@ -198,8 +193,8 @@ except ImportError:
                 # Execute the exact try/except block from the source
                 # This should hit lines 11-12
                 try:
-                    from PyQt6.QtCore import Qt
-                    from PyQt6.QtGui import QPainter, QPixmap
+                    importlib.import_module("PyQt6.QtCore")
+                    importlib.import_module("PyQt6.QtGui")
 
                     real_module.QT_AVAILABLE = True
                 except ImportError:

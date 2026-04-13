@@ -1,11 +1,11 @@
 import importlib
 import os
-from pathlib import Path
 from typing import Any, Dict
 
 from ai_content_classifier.services.metadata.extractors.base_extractor import (
     BaseMetadataExtractor,
 )
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 
 
 class PyPDFExtractor(BaseMetadataExtractor):
@@ -48,7 +48,7 @@ class PyPDFExtractor(BaseMetadataExtractor):
         if not self.pypdf_available:
             return False
 
-        ext = Path(file_path).suffix.lower()
+        ext = FileTypeService.get_extension(file_path)
         return (
             ext == ".pdf"
             and os.path.isfile(file_path)

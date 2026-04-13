@@ -335,7 +335,7 @@ class TestQueryResultFactory:
         list1 = factory1.create()
         list2 = factory2.create()
 
-        assert type(list1) == type(list2) == list
+        assert isinstance(list1, list) and isinstance(list2, list)
         assert len(list1) == len(list2) == 0
         assert factory1.get_key() == factory2.get_key()
 

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "javis"
-version = "1.1.0"
+version = "1.2.0"
 description = "Javis desktop application"
 readme = "README.md"
 license = { text = "GPL-3.0-only" }
@@ -33,7 +33,7 @@ dev = [
     "deadcode",
     "mypy",
     "ruff",
-    "pytest==9.0.2",
+    "pytest==9.0.3",
     "pytest-qt",
     "pytest-cov",
 ]

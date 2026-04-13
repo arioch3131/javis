@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ai_content_classifier.core.logger import LoggableMixin
+from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
 
 
@@ -234,22 +235,7 @@ class TextExtractionService(LoggableMixin):
 
     def _detect_file_format(self, file_path: str) -> str:
         """Detect file format based on extension."""
-
-        _, ext = os.path.splitext(file_path)
-        ext = ext.lower()
-
-        format_map = {
-            ".txt": "text",
-            ".md": "markdown",
-            ".csv": "csv",
-            ".pdf": "pdf",
-            ".doc": "doc",
-            ".docx": "docx",
-            ".rtf": "rtf",
-            ".odt": "odt",
-        }
-
-        return format_map.get(ext, "unknown")
+        return FileTypeService.get_text_format(file_path)
 
     def _extract_by_format(
         self, file_path: str, file_format: str, max_length: int, start_time: float
