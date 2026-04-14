@@ -1,6 +1,11 @@
 from unittest.mock import MagicMock
 
 import ai_content_classifier.views.handlers.ui_event_handler as ui_event_handler_module
+from ai_content_classifier.services.file.operations import FileOperationDataKey
+from ai_content_classifier.services.file.types import (
+    FileOperationCode,
+    FileOperationResult,
+)
 from ai_content_classifier.views.handlers.ui_event_handler import UIEventHandler
 from PyQt6.QtCore import Qt
 
@@ -92,7 +97,12 @@ def test_handle_remove_filtered_results_request_uses_displayed_files(monkeypatch
     handler.logger = MagicMock()
     handler.main_window = MagicMock()
     handler.file_manager = MagicMock()
-    handler.file_manager.remove_files_from_database.return_value = 1
+    handler.file_manager.remove_files_from_database.return_value = FileOperationResult(
+        success=True,
+        code=FileOperationCode.OK,
+        message="ok",
+        data={FileOperationDataKey.DELETED_COUNT.value: 1},
+    )
     handler._get_current_files_list = MagicMock(
         return_value=[("/tmp/visible.png", "/tmp")]
     )

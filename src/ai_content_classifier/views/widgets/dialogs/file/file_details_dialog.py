@@ -37,6 +37,7 @@ class FileDetailsDialog(QDialog):
 
     previous_requested = pyqtSignal()
     next_requested = pyqtSignal()
+    open_file_requested = pyqtSignal(str)
     clear_category_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
@@ -83,6 +84,11 @@ class FileDetailsDialog(QDialog):
         footer_row = QHBoxLayout()
         footer_row.setContentsMargins(0, 0, 0, 0)
         footer_row.addStretch(1)
+        self.open_file_button = QPushButton("Open file", self)
+        self.open_file_button.setObjectName("detailsOpenFileButton")
+        self.open_file_button.setEnabled(False)
+        self.open_file_button.clicked.connect(self._emit_open_file_requested)
+        footer_row.addWidget(self.open_file_button)
         self.clear_category_button = QPushButton("Clear Category", self)
         self.clear_category_button.setObjectName("detailsClearCategoryButton")
         self.clear_category_button.setEnabled(False)
@@ -106,6 +112,7 @@ class FileDetailsDialog(QDialog):
         self.preview_widget.set_file_details(file_details)
         classification = file_details.get("classification", {}) or {}
         category = classification.get("category")
+        self.open_file_button.setEnabled(bool(file_path))
         can_clear = bool(category) and str(category).strip().lower() not in {
             "uncategorized",
         }
@@ -126,3 +133,7 @@ class FileDetailsDialog(QDialog):
     def _emit_clear_category_requested(self) -> None:
         if self.current_file_path:
             self.clear_category_requested.emit(self.current_file_path)
+
+    def _emit_open_file_requested(self) -> None:
+        if self.current_file_path:
+            self.open_file_requested.emit(self.current_file_path)

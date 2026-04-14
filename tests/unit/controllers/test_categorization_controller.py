@@ -5,6 +5,11 @@ from ai_content_classifier.controllers.categorization_controller import (
     CategorizationController,
     CategorizationWorker,
 )
+from ai_content_classifier.services.file.operations import FileOperationDataKey
+from ai_content_classifier.services.file.types import (
+    FileOperationCode,
+    FileOperationResult,
+)
 
 
 def test_worker_is_image_file_helper():
@@ -98,7 +103,12 @@ def test_controller_finish_flow_emits_and_refreshes():
     file_manager = MagicMock()
     file_manager.current_files = [("/tmp/stale.jpg", "/tmp")]
     refreshed_files = [("/tmp/a.jpg", "/tmp")]
-    file_manager.refresh_file_list.return_value = refreshed_files
+    file_manager.refresh_file_list.return_value = FileOperationResult(
+        success=True,
+        code=FileOperationCode.OK,
+        message="ok",
+        data={FileOperationDataKey.FILE_LIST.value: refreshed_files},
+    )
     db_service = MagicMock()
 
     controller = CategorizationController(

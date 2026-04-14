@@ -9,6 +9,11 @@ for module_name in ("PyQt6", "PyQt6.QtCore", "PyQt6.QtGui", "PyQt6.QtWidgets"):
         del sys.modules[module_name]
 
 from ai_content_classifier.views.managers.file_manager import FileManager  # noqa: E402
+from ai_content_classifier.services.file.types import (  # noqa: E402
+    FileOperationCode,
+    FileOperationResult,
+)
+from ai_content_classifier.services.file.operations import FileOperationDataKey  # noqa: E402
 
 
 def test_progress_dialog_cancel_routes_through_file_manager():
@@ -212,7 +217,12 @@ def test_push_scan_operation_state_title_shows_root_plus_first_subdirectory():
 def test_refresh_and_emit_visible_files_emits_refreshed_list_when_no_filters():
     manager = FileManager.__new__(FileManager)
     manager.file_service = MagicMock()
-    manager.file_service.refresh_file_list.return_value = [("/tmp/a.png", "/tmp")]
+    manager.file_service.refresh_file_list.return_value = FileOperationResult(
+        success=True,
+        code=FileOperationCode.OK,
+        message="ok",
+        data={FileOperationDataKey.FILE_LIST.value: [("/tmp/a.png", "/tmp")]},
+    )
     manager.files_updated = MagicMock()
     manager._active_filters = {
         "file_type": [],
@@ -223,7 +233,8 @@ def test_refresh_and_emit_visible_files_emits_refreshed_list_when_no_filters():
 
     result = manager.refresh_and_emit_visible_files()
 
-    assert result == [("/tmp/a.png", "/tmp")]
+    assert result.success is True
+    assert result.data[FileOperationDataKey.FILE_LIST.value] == [("/tmp/a.png", "/tmp")]
     manager.files_updated.emit.assert_called_once_with([("/tmp/a.png", "/tmp")])
 
 
@@ -242,7 +253,12 @@ def test_clear_thumbnail_cache_delegates_to_services():
 def test_refresh_and_emit_visible_files_reapplies_filters_when_active():
     manager = FileManager.__new__(FileManager)
     manager.file_service = MagicMock()
-    manager.file_service.refresh_file_list.return_value = [("/tmp/a.png", "/tmp")]
+    manager.file_service.refresh_file_list.return_value = FileOperationResult(
+        success=True,
+        code=FileOperationCode.OK,
+        message="ok",
+        data={FileOperationDataKey.FILE_LIST.value: [("/tmp/a.png", "/tmp")]},
+    )
     manager.files_updated = MagicMock()
     manager._active_filters = {
         "file_type": [],
@@ -250,9 +266,19 @@ def test_refresh_and_emit_visible_files_reapplies_filters_when_active():
         "year": [],
         "extension": [],
     }
-    manager._apply_cumulative_filters = MagicMock(return_value=[("/tmp/b.png", "/tmp")])
+    manager._apply_cumulative_filters = MagicMock(
+        return_value=FileOperationResult(
+            success=True,
+            code=FileOperationCode.OK,
+            message="ok",
+            data={FileOperationDataKey.FILTERED_FILES.value: [("/tmp/b.png", "/tmp")]},
+        )
+    )
 
     result = manager.refresh_and_emit_visible_files()
 
-    assert result == [("/tmp/b.png", "/tmp")]
+    assert result.success is True
+    assert result.data[FileOperationDataKey.FILTERED_FILES.value] == [
+        ("/tmp/b.png", "/tmp")
+    ]
     manager._apply_cumulative_filters.assert_called_once()
