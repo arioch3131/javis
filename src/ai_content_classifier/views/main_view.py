@@ -154,6 +154,7 @@ class MainView(QObject):
             # Status Presenter
             self.status_presenter = StatusPresenter(self.main_window)
             self.file_manager.bind_main_window(self.main_window)
+            self.main_window.file_manager = self.file_manager
 
             self.logger.debug("Handlers and presenters initialized successfully")
 

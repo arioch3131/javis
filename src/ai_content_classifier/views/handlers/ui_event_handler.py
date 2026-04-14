@@ -28,6 +28,7 @@ from ai_content_classifier.services.content_database_service import (
 from ai_content_classifier.views.main_window import MainWindow
 from ai_content_classifier.views.managers.file_manager import FileManager
 from ai_content_classifier.views.managers.settings_manager import SettingsManager
+from ai_content_classifier.services.file.operations import FileOperationDataKey
 from ai_content_classifier.views.widgets.dialogs import (
     AdvancedScanDialog,
     AutoOrganizeDialog,
@@ -409,8 +410,14 @@ class UIEventHandler(QObject):
             self.logger.debug("Filtered database removal cancelled by user.")
             return
 
-        deleted_count = self.file_manager.remove_files_from_database(
+        operation_result = self.file_manager.remove_files_from_database(
             [file_path for file_path, _ in current_files]
+        )
+        deleted_count = int(
+            (operation_result.data or {}).get(
+                FileOperationDataKey.DELETED_COUNT.value,
+                0,
+            )
         )
         QMessageBox.information(
             self.main_window,

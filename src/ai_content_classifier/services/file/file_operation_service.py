@@ -15,8 +15,6 @@ import re
 import shutil
 import sys
 
-from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ai_content_classifier.core.logger import LoggableMixin
@@ -24,81 +22,28 @@ from ai_content_classifier.core.logger import LoggableMixin
 from ai_content_classifier.services.settings.config_service import ConfigService
 from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
-    ContentFilter,
 )
 from ai_content_classifier.models.content_models import ContentItem
 from ai_content_classifier.services.file.file_type_service import FileTypeService
+from ai_content_classifier.services.file.operations import (
+    ApplyFilterOperation,
+    FileOperationDataKey,
+    OpenFileOperation,
+    ProcessFileResultOperation,
+    ProcessScanResultsOperation,
+    RefreshFileListOperation,
+    RemoveFilesFromDatabaseOperation,
+)
+from ai_content_classifier.services.file.types import (
+    FileOperationCode,
+    FilterType,
+    FileOperationResult,
+    FileProcessingResult,
+    ScanStatistics,
+)
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
 from ai_content_classifier.services.thumbnail.thumbnail_service import ThumbnailService
-
-
-class FilterType(Enum):
-    """
-    Enhanced enumeration of available filter types.
-
-    These values must match exactly what the UI sends:
-    - MainWindow sends 'All Files', 'Images', 'Documents', 'Uncategorized'
-    - FileManager maps these to enum values
-    - FileOperationService uses these enum values for filtering
-
-    ENHANCED: Now supports multi-selection filter types.
-    """
-
-    ALL_FILES = "All Files"
-    IMAGES = "Images"
-    DOCUMENTS = "Documents"
-    UNCATEGORIZED = "Uncategorized"
-    VIDEOS = "Videos"
-    AUDIO = "Audio"
-    ARCHIVES = "Archives"
-    CODE = "Code"
-    OTHER = "Other"
-
-    # Special values for multi-selections
-    MULTI_CATEGORY = "multi_category"
-    MULTI_YEAR = "multi_year"
-    MULTI_EXTENSION = "multi_extension"
-
-
-@dataclass
-class ScanStatistics:
-    """
-    A data class to hold comprehensive statistics about a file scanning operation.
-
-    Attributes:
-        files_found (int): The total number of files discovered during the scan.
-        metadata_extracted (int): The count of files for which metadata was successfully extracted.
-        thumbnails_generated (int): The count of files for which thumbnails were successfully generated.
-        errors (int): The total number of errors encountered during the scan or processing.
-        processing_time (float): The total time taken for the scan and processing, in seconds.
-        directory_scanned (str): The path of the directory that was scanned.
-    """
-
-    files_found: int = 0
-    metadata_extracted: int = 0
-    thumbnails_generated: int = 0
-    errors: int = 0
-    processing_time: float = 0.0
-    directory_scanned: str = ""
-
-
-@dataclass
-class FileProcessingResult:
-    """
-    A data class representing the outcome of processing a single file.
-
-    Attributes:
-        file_path (str): The absolute path to the processed file.
-        metadata_extracted (bool): `True` if metadata extraction was successful for the file.
-        thumbnail_generated (bool): `True` if thumbnail generation was successful for the file.
-        error_message (Optional[str]): An optional error message if processing failed for any reason.
-    """
-
-    file_path: str
-    metadata_extracted: bool
-    thumbnail_generated: bool
-    error_message: Optional[str] = None
 
 
 class FileOperationService(LoggableMixin):
@@ -156,6 +101,25 @@ class FileOperationService(LoggableMixin):
         self._current_content_by_path: Dict[str, Any] = {}
         self._current_filter: FilterType = FilterType.ALL_FILES
         self._last_scan_stats = ScanStatistics()
+        self._open_file_operation = OpenFileOperation(logger=self.logger)
+        self._remove_from_db_operation = RemoveFilesFromDatabaseOperation(
+            db_service=self.db_service,
+            logger=self.logger,
+        )
+        self._refresh_file_list_operation = RefreshFileListOperation(
+            db_service=self.db_service,
+            logger=self.logger,
+        )
+        self._apply_filter_operation = ApplyFilterOperation(
+            db_service=self.db_service,
+            logger=self.logger,
+        )
+        self._process_scan_results_operation = ProcessScanResultsOperation(
+            logger=self.logger
+        )
+        self._process_file_result_operation = ProcessFileResultOperation(
+            logger=self.logger
+        )
 
         # Callbacks for notifying external components about events. These are not Qt signals.
         self._on_scan_started: Optional[Callable[[str], None]] = None
@@ -207,7 +171,9 @@ class FileOperationService(LoggableMixin):
 
     # === SCAN OPERATIONS ===
 
-    def process_scan_results(self, file_list: List[Tuple[str, str]]) -> None:
+    def process_scan_results(
+        self, file_list: List[Tuple[str, str]]
+    ) -> FileOperationResult:
         """
         Processes the results obtained from a directory scan.
 
@@ -219,45 +185,77 @@ class FileOperationService(LoggableMixin):
                                                 the absolute file path and its directory.
         """
         try:
-            self.logger.info(f"Processing scan results: {len(file_list)} files found.")
+            operation_result = self._process_scan_results_operation.execute(file_list)
+            if not operation_result.success:
+                error_msg = (
+                    operation_result.message or "Failed to process scan results."
+                )
+                self.logger.error(error_msg)
+                if self._on_scan_error:
+                    self._on_scan_error(error_msg)
+                return operation_result
+            result_data = operation_result.data or {}
+            normalized_file_list = result_data.get(
+                FileOperationDataKey.FILE_LIST.value,
+                list(file_list or []),
+            )
 
             # Update internal state with the new list of files.
-            self._current_files = file_list
-            self._current_content_by_path = {}
-            self._last_scan_stats.files_found = len(file_list)
+            self._current_files = normalized_file_list
+            self._current_content_by_path = result_data.get(
+                FileOperationDataKey.CONTENT_BY_PATH.value, {}
+            )
+            self._last_scan_stats.files_found = int(
+                result_data.get(
+                    FileOperationDataKey.FILES_FOUND.value, len(normalized_file_list)
+                )
+            )
 
             # Notify registered callbacks about the completion and updates.
             if self._on_scan_completed:
-                self._on_scan_completed(file_list)
+                self._on_scan_completed(normalized_file_list)
 
             if self._on_files_updated:
-                self._on_files_updated(file_list)
+                self._on_files_updated(normalized_file_list)
 
             if self._on_stats_updated:
                 self._on_stats_updated(self._last_scan_stats)
 
-            self.logger.info(f"Scan results processed: {len(file_list)} files.")
+            self.logger.info(
+                f"Scan results processed: {len(normalized_file_list)} files."
+            )
+            return operation_result
 
         except Exception as e:
             error_msg = f"An error occurred while processing scan results: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
             if self._on_scan_error:
                 self._on_scan_error(error_msg)
+            return FileOperationResult(
+                success=False,
+                code=FileOperationCode.UNKNOWN_ERROR,
+                message=error_msg,
+                data={},
+            )
 
-    def remove_files_from_database(self, file_paths: List[str]) -> int:
+    def remove_files_from_database(self, file_paths: List[str]) -> FileOperationResult:
         """Removes the provided files from the content database only."""
-        normalized_paths = [
-            str(path) for path in dict.fromkeys(file_paths or []) if path
-        ]
-        if not normalized_paths:
-            self.logger.info("No file paths provided for database removal.")
-            return 0
-
-        deleted_count = self.db_service.delete_content_by_paths(normalized_paths)
+        operation_result = self._remove_from_db_operation.execute(file_paths)
+        if not operation_result.success:
+            self.logger.error(
+                operation_result.message or "Failed to remove files from database."
+            )
+            return operation_result
+        result_data = operation_result.data or {}
+        deleted_count = int(
+            result_data.get(FileOperationDataKey.DELETED_COUNT.value, 0)
+        )
         if deleted_count <= 0:
-            return 0
+            return operation_result
 
-        removed_paths = set(normalized_paths)
+        removed_paths = set(
+            result_data.get(FileOperationDataKey.NORMALIZED_PATHS.value, [])
+        )
         self._current_files = [
             (file_path, directory)
             for file_path, directory in self._current_files
@@ -274,7 +272,11 @@ class FileOperationService(LoggableMixin):
         self.logger.info(
             f"Removed {deleted_count} files from the database; {len(self._current_files)} remain in the current dataset."
         )
-        return deleted_count
+        return operation_result
+
+    def open_file(self, file_path: str) -> FileOperationResult:
+        """Open a file via the system default application."""
+        return self._open_file_operation.execute(file_path)
 
     def process_file_result(
         self,
@@ -282,7 +284,7 @@ class FileOperationService(LoggableMixin):
         metadata_ok: bool,
         thumbnail_ok: bool,
         error_message: Optional[str] = None,
-    ) -> None:
+    ) -> FileOperationResult:
         """
         Processes the outcome of an individual file processing operation.
 
@@ -291,39 +293,46 @@ class FileOperationService(LoggableMixin):
         via the `on_file_processed` callback.
         """
         try:
-            # Update internal statistics based on processing success.
-            if metadata_ok:
-                self._last_scan_stats.metadata_extracted += 1
-            if thumbnail_ok:
-                self._last_scan_stats.thumbnails_generated += 1
-            if error_message:
-                self._last_scan_stats.errors += 1
-
-            # Create a `FileProcessingResult` object to encapsulate the outcome.
-            result = FileProcessingResult(
+            operation_result = self._process_file_result_operation.execute(
+                stats=self._last_scan_stats,
                 file_path=file_path,
-                metadata_extracted=metadata_ok,
-                thumbnail_generated=thumbnail_ok,
+                metadata_ok=metadata_ok,
+                thumbnail_ok=thumbnail_ok,
                 error_message=error_message,
             )
+            if not operation_result.success:
+                raise RuntimeError(
+                    operation_result.message or "Failed to process file result."
+                )
+            result = operation_result.data.get(
+                FileOperationDataKey.FILE_PROCESSING_RESULT.value
+            )
+            if not isinstance(result, FileProcessingResult):
+                raise RuntimeError("Invalid file processing payload returned.")
 
             # Notify the callback about the processed file.
             if self._on_file_processed:
                 self._on_file_processed(result)
-
-            self.logger.debug(
-                f"File processed: {os.path.basename(file_path)} (metadata={metadata_ok}, thumbnail={thumbnail_ok})."
-            )
+            return operation_result
 
         except Exception as e:
+            error_msg = (
+                f"An error occurred while processing individual file result: {e}"
+            )
             self.logger.error(
-                f"An error occurred while processing individual file result: {e}",
+                error_msg,
                 exc_info=True,
+            )
+            return FileOperationResult(
+                success=False,
+                code=FileOperationCode.UNKNOWN_ERROR,
+                message=error_msg,
+                data={},
             )
 
     # === FILE MANAGEMENT ===
 
-    def refresh_file_list(self) -> List[Tuple[str, str]]:
+    def refresh_file_list(self) -> FileOperationResult:
         """
         Refreshes the internal list of files by querying the database.
 
@@ -337,40 +346,23 @@ class FileOperationService(LoggableMixin):
         """
         try:
             self.logger.debug("Refreshing file list from database.")
-
-            # Force database synchronization to ensure all committed data is visible.
-            if hasattr(self.db_service, "force_database_sync"):
-                self.db_service.force_database_sync()
-
-            # Log database state for debugging purposes.
-            if hasattr(self.db_service, "count_all_items"):
-                total_count = self.db_service.count_all_items()
-                self.logger.info(
-                    f"Total items in database before refresh: {total_count}."
+            operation_result = self._refresh_file_list_operation.execute(
+                self._current_files
+            )
+            if not operation_result.success:
+                error_msg = (
+                    operation_result.message
+                    or "An error occurred while refreshing the file list."
                 )
-
-            # Retrieve all content items from the database.
-            all_content = self.db_service.find_items(eager_load=False)
-            self.logger.info(f"Retrieved {len(all_content)} items from database.")
-
-            # Convert retrieved content items into the expected (file_path, directory) format.
-            file_list = []
-            content_by_path: Dict[str, Any] = {}
-            for item in all_content:
-                if hasattr(item, "path") and hasattr(item, "directory"):
-                    file_list.append((item.path, item.directory))
-                    content_by_path[item.path] = item
-                else:
-                    self.logger.warning(
-                        f"Skipping item due to missing path or directory attributes: {item}."
-                    )
-
-            # Keep the in-memory list when DB is temporarily empty to avoid wiping the UI.
-            if not file_list and self._current_files:
-                self.logger.warning(
-                    "Database refresh returned 0 items while in-memory list is not empty; preserving current files."
-                )
-                file_list = self._current_files.copy()
+                self.logger.error(error_msg)
+                if self._on_scan_error:
+                    self._on_scan_error(error_msg)
+                return operation_result
+            result_data = operation_result.data or {}
+            file_list = result_data.get(FileOperationDataKey.FILE_LIST.value, [])
+            content_by_path = result_data.get(
+                FileOperationDataKey.CONTENT_BY_PATH.value, {}
+            )
 
             # Update the service's internal list of files.
             self._current_files = file_list
@@ -381,14 +373,22 @@ class FileOperationService(LoggableMixin):
                 self._on_files_updated(file_list)
 
             self.logger.info(f"File list updated: {len(file_list)} files.")
-            return file_list
+            return operation_result
 
         except Exception as e:
             error_msg = f"An error occurred while refreshing the file list: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
             if self._on_scan_error:
                 self._on_scan_error(error_msg)
-            return []
+            return FileOperationResult(
+                success=False,
+                code=FileOperationCode.UNKNOWN_ERROR,
+                message=error_msg,
+                data={
+                    FileOperationDataKey.FILE_LIST.value: [],
+                    FileOperationDataKey.CONTENT_BY_PATH.value: {},
+                },
+            )
 
     def clear_current_files(self) -> None:
         """
@@ -397,6 +397,7 @@ class FileOperationService(LoggableMixin):
         self._current_files = []
         self._current_content_by_path = {}
         self._current_filter = FilterType.ALL_FILES
+        self._last_scan_stats = ScanStatistics()
 
     @staticmethod
     def _resolve_thumbnail_cache_dir() -> str:
@@ -445,7 +446,7 @@ class FileOperationService(LoggableMixin):
 
     # === ENHANCED FILTERING SYSTEM ===
 
-    def apply_filter(self, filter_type: FilterType) -> List[Tuple[str, str]]:
+    def apply_filter(self, filter_type: FilterType) -> FileOperationResult:
         """
         Applies a specified filter type to the current list of files.
 
@@ -459,79 +460,42 @@ class FileOperationService(LoggableMixin):
             List[Tuple[str, str]]: A list of files that match the applied filter criteria.
         """
         try:
-            self.logger.debug(f"Applying filter: {filter_type.value}.")
-
-            # For special multi-filter types, delegate to appropriate methods
-            if filter_type == FilterType.MULTI_CATEGORY:
-                # This should not be called directly - use apply_multi_category_filter instead
-                self.logger.warning(
-                    "MULTI_CATEGORY filter called directly - use apply_multi_category_filter instead"
-                )
-                return self._current_files.copy()
-            elif filter_type == FilterType.MULTI_YEAR:
-                # This should not be called directly - use apply_multi_year_filter instead
-                self.logger.warning(
-                    "MULTI_YEAR filter called directly - use apply_multi_year_filter instead"
-                )
-                return self._current_files.copy()
-            elif filter_type == FilterType.MULTI_EXTENSION:
-                # This should not be called directly - use apply_multi_extension_filter instead
-                self.logger.warning(
-                    "MULTI_EXTENSION filter called directly - use apply_multi_extension_filter instead"
-                )
-                return self._current_files.copy()
-
-            # For standard filters, use database-based filtering when possible
-            if filter_type == FilterType.ALL_FILES:
-                filtered_files = self._current_files.copy()
-            elif filter_type == FilterType.UNCATEGORIZED:
-                filtered_files = self._filter_uncategorized()
-            else:
-                # Use database content filtering for type-based filters
-                content_filter = ContentFilter()
-                if filter_type == FilterType.IMAGES:
-                    content_filter.by_type("image")
-                elif filter_type == FilterType.DOCUMENTS:
-                    content_filter.by_type("document")
-                elif filter_type == FilterType.VIDEOS:
-                    content_filter.by_type("video")
-                elif filter_type == FilterType.AUDIO:
-                    content_filter.by_type("audio")
-                elif filter_type == FilterType.ARCHIVES:
-                    content_filter.by_type("archive")
-                elif filter_type == FilterType.CODE:
-                    content_filter.by_type("code")
-                elif filter_type == FilterType.OTHER:
-                    content_filter.by_type("other")
-                else:
-                    # Fallback to extension-based filtering
-                    filtered_files = self._filter_files_by_type(filter_type)
-
-                if "content_filter" in locals():
-                    filtered_content = self.db_service.find_items(
-                        content_filter=content_filter
-                    )
-                    filtered_files = [
-                        (item.path, item.directory) for item in filtered_content
-                    ]
+            operation_result = self._apply_filter_operation.execute(
+                filter_type=filter_type,
+                current_files=self._current_files,
+                filter_uncategorized=self._filter_uncategorized,
+                filter_files_by_type=self._filter_files_by_type,
+            )
+            if not operation_result.success:
+                error_msg = operation_result.message or "Failed to apply filter."
+                self.logger.error(error_msg)
+                if self._on_scan_error:
+                    self._on_scan_error(error_msg)
+                return operation_result
+            filtered_files = operation_result.data.get(
+                FileOperationDataKey.FILTERED_FILES.value, []
+            )
 
             self._current_filter = filter_type
 
             # Notify the callback about the applied filter and the resulting file list.
             if self._on_filter_applied:
                 self._on_filter_applied(filter_type, filtered_files)
-
-            self.logger.debug(
-                f"Filter applied: {len(filtered_files)} files match the criteria."
-            )
-            return filtered_files
+            return operation_result
 
         except Exception as e:
             error_msg = f"An error occurred while applying the filter: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
             if self._on_scan_error:
                 self._on_scan_error(error_msg)
-            return self._current_files.copy()  # Return original list on error.
+            return FileOperationResult(
+                success=False,
+                code=FileOperationCode.UNKNOWN_ERROR,
+                message=error_msg,
+                data={
+                    FileOperationDataKey.FILTERED_FILES.value: self._current_files.copy()
+                },
+            )
 
     # === NEW: MULTI-SELECTION FILTER METHODS ===
 
@@ -554,24 +518,11 @@ class FileOperationService(LoggableMixin):
             ]
         else:
             filtered_files = []
+            predicate = self._resolve_filter_predicate(filter_type)
+            if predicate is None:
+                return filtered_files
             for file_path, directory in file_list:
-                should_include = False
-                if filter_type == FilterType.IMAGES:
-                    should_include = FileTypeService.is_image_file(file_path)
-                elif filter_type == FilterType.DOCUMENTS:
-                    should_include = FileTypeService.is_document_file(file_path)
-                elif filter_type == FilterType.VIDEOS:
-                    should_include = FileTypeService.is_video_file(file_path)
-                elif filter_type == FilterType.AUDIO:
-                    should_include = FileTypeService.is_audio_file(file_path)
-                elif filter_type == FilterType.ARCHIVES:
-                    should_include = FileTypeService.is_archive_file(file_path)
-                elif filter_type == FilterType.CODE:
-                    should_include = FileTypeService.is_code_file(file_path)
-                elif filter_type == FilterType.OTHER:
-                    category = FileTypeService.get_file_category(file_path)
-                    should_include = category.value == "Other"
-                if should_include:
+                if predicate(file_path):
                     filtered_files.append((file_path, directory))
             return filtered_files
 
@@ -610,60 +561,7 @@ class FileOperationService(LoggableMixin):
         for file_path, directory in file_list:
             content_item = content_map.get(file_path)
             if content_item:
-                file_year = None
-                if hasattr(content_item, "year_taken") and content_item.year_taken:
-                    if int(content_item.year_taken) in normalized_years:
-                        filtered_files.append((file_path, directory))
-                        continue
-                if hasattr(content_item, "date_created") and content_item.date_created:
-                    if hasattr(content_item.date_created, "year"):
-                        file_year = content_item.date_created.year
-                if (
-                    not file_year
-                    and hasattr(content_item, "date_modified")
-                    and content_item.date_modified
-                ):
-                    if hasattr(content_item.date_modified, "year"):
-                        file_year = content_item.date_modified.year
-                if (
-                    not file_year
-                    and hasattr(content_item, "date_indexed")
-                    and content_item.date_indexed
-                ):
-                    if hasattr(content_item.date_indexed, "year"):
-                        file_year = content_item.date_indexed.year
-                if (
-                    not file_year
-                    and hasattr(content_item, "content_metadata")
-                    and content_item.content_metadata
-                ):
-                    metadata = content_item.content_metadata
-                    for date_key in (
-                        "year",
-                        "year_taken",
-                        "creation_date",
-                        "date_created",
-                        "date",
-                        "created",
-                        "timestamp",
-                        "DateTimeOriginal",
-                        "datetime_original",
-                    ):
-                        if date_key in metadata and metadata[date_key] is not None:
-                            file_year = self._extract_year_from_value(
-                                metadata[date_key]
-                            )
-                            if file_year:
-                                break
-                if not file_year:
-                    try:
-                        from datetime import datetime
-
-                        file_year = datetime.fromtimestamp(
-                            os.path.getmtime(file_path)
-                        ).year
-                    except (OSError, OverflowError, ValueError):
-                        file_year = None
+                file_year = self._resolve_file_year(content_item, file_path)
                 if file_year and int(file_year) in normalized_years:
                     filtered_files.append((file_path, directory))
         return filtered_files
@@ -705,8 +603,55 @@ class FileOperationService(LoggableMixin):
             for item in batch_items:
                 if hasattr(item, "path"):
                     path_to_item[item.path] = item
+                    self._current_content_by_path[item.path] = item
 
         return path_to_item
+
+    def _resolve_file_year(self, content_item: Any, file_path: str) -> Optional[int]:
+        """Resolve a file year from content fields, metadata, then filesystem mtime."""
+        year_taken = getattr(content_item, "year_taken", None)
+        if year_taken is not None:
+            try:
+                normalized_year = int(year_taken)
+                if 1900 <= normalized_year <= 2100:
+                    return normalized_year
+            except (TypeError, ValueError):
+                pass
+
+        for attr_name in ("date_created", "date_modified", "date_indexed"):
+            raw_date = getattr(content_item, attr_name, None)
+            year_value = getattr(raw_date, "year", None) if raw_date else None
+            if year_value is not None:
+                try:
+                    normalized_year = int(year_value)
+                    if 1900 <= normalized_year <= 2100:
+                        return normalized_year
+                except (TypeError, ValueError):
+                    pass
+
+        metadata = getattr(content_item, "content_metadata", None) or {}
+        for date_key in (
+            "year",
+            "year_taken",
+            "creation_date",
+            "date_created",
+            "date",
+            "created",
+            "timestamp",
+            "DateTimeOriginal",
+            "datetime_original",
+        ):
+            if date_key in metadata and metadata[date_key] is not None:
+                metadata_year = self._extract_year_from_value(metadata[date_key])
+                if metadata_year:
+                    return metadata_year
+
+        try:
+            from datetime import datetime
+
+            return datetime.fromtimestamp(os.path.getmtime(file_path)).year
+        except (OSError, OverflowError, ValueError):
+            return None
 
     def _extract_year_from_value(self, raw_value: Any) -> Optional[int]:
         """Extract a valid year (1900-2100) from arbitrary metadata values."""
@@ -775,35 +720,36 @@ class FileOperationService(LoggableMixin):
             List[Tuple[str, str]]: A new list containing only the files that match the specified type.
         """
         filtered_files = []
+        predicate = self._resolve_filter_predicate(filter_type)
+        if predicate is None:
+            return filtered_files
 
         try:
             for file_path, directory in self._current_files:
-                should_include = False
-
-                if filter_type == FilterType.IMAGES:
-                    should_include = FileTypeService.is_image_file(file_path)
-                elif filter_type == FilterType.DOCUMENTS:
-                    should_include = FileTypeService.is_document_file(file_path)
-                elif filter_type == FilterType.VIDEOS:
-                    should_include = FileTypeService.is_video_file(file_path)
-                elif filter_type == FilterType.AUDIO:
-                    should_include = FileTypeService.is_audio_file(file_path)
-                elif filter_type == FilterType.ARCHIVES:
-                    should_include = FileTypeService.is_archive_file(file_path)
-                elif filter_type == FilterType.CODE:
-                    should_include = FileTypeService.is_code_file(file_path)
-                elif filter_type == FilterType.OTHER:
-                    # OTHER includes files that don't match any known category
-                    category = FileTypeService.get_file_category(file_path)
-                    should_include = category.value == "Other"
-
-                if should_include:
+                if predicate(file_path):
                     filtered_files.append((file_path, directory))
 
         except Exception as e:
             self.logger.error(f"Error in _filter_files_by_type: {e}")
 
         return filtered_files
+
+    def _resolve_filter_predicate(
+        self, filter_type: FilterType
+    ) -> Optional[Callable[[str], bool]]:
+        """Resolve file-type predicate for local extension/category filtering."""
+        predicates: Dict[FilterType, Callable[[str], bool]] = {
+            FilterType.IMAGES: FileTypeService.is_image_file,
+            FilterType.DOCUMENTS: FileTypeService.is_document_file,
+            FilterType.VIDEOS: FileTypeService.is_video_file,
+            FilterType.AUDIO: FileTypeService.is_audio_file,
+            FilterType.ARCHIVES: FileTypeService.is_archive_file,
+            FilterType.CODE: FileTypeService.is_code_file,
+            FilterType.OTHER: lambda path: (
+                FileTypeService.get_file_category(path).value == "Other"
+            ),
+        }
+        return predicates.get(filter_type)
 
     # === UTILITIES AND METADATA ===
 

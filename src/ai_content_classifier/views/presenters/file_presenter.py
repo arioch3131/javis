@@ -12,10 +12,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QObject, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QMessageBox
 from ai_content_classifier.services.content_database_service import (
     ContentDatabaseService,
 )
 from ai_content_classifier.services.file.file_type_service import is_image_file
+from ai_content_classifier.services.file.types import FileOperationCode
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
 from ai_content_classifier.services.config_service import ConfigKey, ConfigService
@@ -523,6 +525,9 @@ class FilePresenter(QObject):
                 self._details_dialog.next_requested.connect(
                     self._show_next_file_details
                 )
+                self._details_dialog.open_file_requested.connect(
+                    self._on_open_file_requested
+                )
                 self._details_dialog.clear_category_requested.connect(
                     self._on_clear_category_requested
                 )
@@ -570,6 +575,69 @@ class FilePresenter(QObject):
                 f"Error clearing category for file {normalized_path}: {exc}",
                 exc_info=True,
             )
+
+    def _on_open_file_requested(self, file_path: str) -> None:
+        """Open a file from the details dialog using the file operation service."""
+        normalized_path = str(file_path or "").strip()
+        if not normalized_path:
+            return
+
+        file_manager = getattr(self.main_window, "file_manager", None)
+        file_service = getattr(file_manager, "file_service", None)
+        if not file_service or not hasattr(file_service, "open_file"):
+            self.logger.warning("File open service is not available.")
+            QMessageBox.warning(
+                self.main_window,
+                "Open file",
+                "Open file service is not available.",
+            )
+            return
+
+        result = file_service.open_file(normalized_path)
+        if result.success:
+            self.logger.info(f"File opened successfully: {normalized_path}")
+            return
+
+        self.logger.warning(
+            "Failed to open file %s with code %s",
+            normalized_path,
+            getattr(result, "code", "unknown"),
+        )
+        QMessageBox.warning(
+            self.main_window,
+            "Open file",
+            self._build_open_file_error_message(result),
+        )
+
+    def _build_open_file_error_message(self, result: Any) -> str:
+        """Build user-facing actionable error message for open-file failures."""
+        code = getattr(result, "code", FileOperationCode.UNKNOWN_ERROR)
+        if code == FileOperationCode.FILE_NOT_FOUND:
+            return (
+                "File not found.\n"
+                "Please verify the file still exists and refresh the file list."
+            )
+        if code == FileOperationCode.NO_DEFAULT_APP:
+            return (
+                "No default app is configured for this file type.\n"
+                "Please set a default application and try again."
+            )
+        if code == FileOperationCode.ACCESS_DENIED:
+            return (
+                "Access denied while opening this file.\n"
+                "Please check file permissions and try again."
+            )
+
+        service_message = str(getattr(result, "message", "") or "").strip()
+        if service_message:
+            return (
+                f"{service_message}\n"
+                "Please try again, and check system logs if the problem persists."
+            )
+        return (
+            "Unable to open this file due to an unexpected error.\n"
+            "Please try again, and check system logs if the problem persists."
+        )
 
     def _build_file_details(self, file_path: str) -> Dict[str, Any]:
         metadata = self.get_or_create_metadata(file_path)

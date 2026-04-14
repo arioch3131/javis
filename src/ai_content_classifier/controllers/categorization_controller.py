@@ -15,6 +15,7 @@ from ai_content_classifier.core.logger import get_logger
 from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
+from ai_content_classifier.services.file.operations import FileOperationDataKey
 from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.llm.llm_service import LLMService
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
@@ -687,7 +688,10 @@ class CategorizationController(QObject):
         self.categorization_completed.emit(results)
 
         # Refresh the file list in the FileManager to update the UI
-        refreshed_files = self.file_manager.refresh_file_list()
+        refresh_result = self.file_manager.refresh_file_list()
+        refreshed_files = list(
+            (refresh_result.data or {}).get(FileOperationDataKey.FILE_LIST.value, [])
+        )
         self.file_manager.files_updated.emit(refreshed_files)
 
         # Cleanup

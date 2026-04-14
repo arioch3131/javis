@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from ai_content_classifier.services.file.file_operation_service import (
     FileOperationService,
 )
+from ai_content_classifier.services.file.operations import FileOperationDataKey
 
 
 def test_remove_files_from_database_updates_current_files_and_callbacks():
@@ -25,9 +26,10 @@ def test_remove_files_from_database_updates_current_files_and_callbacks():
         on_files_updated=on_files_updated, on_stats_updated=on_stats_updated
     )
 
-    deleted = service.remove_files_from_database(["/tmp/a.png", "/tmp/c.png"])
+    result = service.remove_files_from_database(["/tmp/a.png", "/tmp/c.png"])
 
-    assert deleted == 2
+    assert result.success is True
+    assert result.data[FileOperationDataKey.DELETED_COUNT.value] == 2
     db_service.delete_content_by_paths.assert_called_once_with(
         ["/tmp/a.png", "/tmp/c.png"]
     )
@@ -44,7 +46,8 @@ def test_remove_files_from_database_ignores_empty_input():
         thumbnail_service=MagicMock(),
     )
 
-    deleted = service.remove_files_from_database([])
+    result = service.remove_files_from_database([])
 
-    assert deleted == 0
+    assert result.success is True
+    assert result.data[FileOperationDataKey.DELETED_COUNT.value] == 0
     service.db_service.delete_content_by_paths.assert_not_called()

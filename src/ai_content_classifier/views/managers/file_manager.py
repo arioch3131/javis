@@ -20,6 +20,11 @@ from ai_content_classifier.services.content_database_service import (
 )
 from ai_content_classifier.services.file.file_operation_service import (
     FileOperationService,
+)
+from ai_content_classifier.services.file.operations import FileOperationDataKey
+from ai_content_classifier.services.file.types import (
+    FileOperationCode,
+    FileOperationResult,
     FileProcessingResult,
     FilterType,
     ScanStatistics,
@@ -581,8 +586,13 @@ class FileManager(QObject):
 
             # Rebuild the visible dataset from the persisted source of truth after
             # the scan pipeline updated the database/service state.
-            refreshed_files = self.refresh_file_list()
-            if refreshed_files:
+            refresh_result = self.refresh_file_list()
+            refreshed_files = list(
+                (refresh_result.data or {}).get(
+                    FileOperationDataKey.FILE_LIST.value, []
+                )
+            )
+            if refresh_result.success and refreshed_files:
                 self.logger.info(
                     f"🔄 UI refreshed after scan with {len(refreshed_files)} files"
                 )
@@ -725,7 +735,7 @@ class FileManager(QObject):
 
     def apply_filter(
         self, filter_data: Union[str, Dict[str, Any]]
-    ) -> List[Tuple[str, str]]:
+    ) -> FileOperationResult:
         """
         Enhanced filter application that handles both simple and multi-selection filters.
 
@@ -739,7 +749,7 @@ class FileManager(QObject):
                         - {'type': 'extension', 'value': ['.jpg', '.png']}
 
         Returns:
-            List of filtered files
+            FileOperationResult with `data["filtered_files"]`
         """
         self.logger.debug(f"🔍 FileManager.apply_filter: {filter_data}")
 
@@ -823,7 +833,7 @@ class FileManager(QObject):
                 f"Filter type {filter_type} not found in active filters."
             )
 
-    def _apply_cumulative_filters(self) -> List[Tuple[str, str]]:
+    def _apply_cumulative_filters(self) -> FileOperationResult:
         """
         Applies all currently active filters cumulatively.
         """
@@ -833,7 +843,25 @@ class FileManager(QObject):
 
         try:
             # Start with all files
-            filtered_files = self.file_service.refresh_file_list()
+            refresh_result = self.file_service.refresh_file_list()
+            if not refresh_result.success:
+                return FileOperationResult(
+                    success=False,
+                    code=refresh_result.code,
+                    message=refresh_result.message,
+                    data={
+                        FileOperationDataKey.FILTERED_FILES.value: (
+                            (refresh_result.data or {}).get(
+                                FileOperationDataKey.FILE_LIST.value, []
+                            )
+                        )
+                    },
+                )
+            filtered_files = list(
+                (refresh_result.data or {}).get(
+                    FileOperationDataKey.FILE_LIST.value, []
+                )
+            )
 
             # Apply file type filter
             file_type_filters = self._active_filters.get("file_type", [])
@@ -875,7 +903,12 @@ class FileManager(QObject):
                 self._active_filters, filtered_files
             )  # Emit the active filters dictionary and filtered files
             self.logger.debug("FileManager: Finished emitting filter_applied")
-            return filtered_files
+            return FileOperationResult(
+                success=True,
+                code=FileOperationCode.OK,
+                message="Cumulative filters applied.",
+                data={FileOperationDataKey.FILTERED_FILES.value: filtered_files},
+            )
         finally:
             self._is_applying_filter_internally = False  # Reset flag
 
@@ -1041,25 +1074,34 @@ class FileManager(QObject):
 
     # === PUBLIC METHODS (delegate to service) ===
 
-    def refresh_file_list(self) -> List[Tuple[str, str]]:
+    def refresh_file_list(self) -> FileOperationResult:
         """
         Refreshes the file list from the database.
 
         Returns:
-            List of files (file_path, directory)
+            FileOperationResult with `data["file_list"]`
         """
         return self.file_service.refresh_file_list()
 
-    def refresh_and_emit_visible_files(self) -> List[Tuple[str, str]]:
+    def refresh_and_emit_visible_files(self) -> FileOperationResult:
         """
         Refreshes files from the database and emits the visible dataset to the UI.
         Active filters are preserved.
         """
-        refreshed_files = self.file_service.refresh_file_list()
+        refresh_result = self.file_service.refresh_file_list()
+        refreshed_files = list(
+            (refresh_result.data or {}).get(FileOperationDataKey.FILE_LIST.value, [])
+        )
         if self._has_active_filters():
             return self._apply_cumulative_filters()
-        self.files_updated.emit(refreshed_files)
-        return refreshed_files
+        if refresh_result.success:
+            self.files_updated.emit(refreshed_files)
+        return FileOperationResult(
+            success=refresh_result.success,
+            code=refresh_result.code,
+            message=refresh_result.message,
+            data={FileOperationDataKey.FILE_LIST.value: refreshed_files},
+        )
 
     def get_thumbnail_path(self, file_path: str) -> Optional[str]:
         """
@@ -1123,18 +1165,22 @@ class FileManager(QObject):
         ):
             self.file_service.thumbnail_service.clear_cache()
 
-    def remove_files_from_database(self, file_paths: List[str]) -> int:
+    def remove_files_from_database(self, file_paths: List[str]) -> FileOperationResult:
         """Removes only the provided files from the content database."""
         self.logger.info(
             f"Removing {len(file_paths or [])} filtered files from the content database"
         )
         try:
-            deleted_count = self.file_service.remove_files_from_database(file_paths)
-            return deleted_count
+            return self.file_service.remove_files_from_database(file_paths)
         except Exception as e:
             self.logger.error(f"Error removing filtered files from database: {e}")
             self.scan_error.emit(f"Error removing filtered files from database: {e}")
-            return 0
+            return FileOperationResult(
+                success=False,
+                code=FileOperationCode.UNKNOWN_ERROR,
+                message=f"Error removing filtered files from database: {e}",
+                data={FileOperationDataKey.DELETED_COUNT.value: 0},
+            )
 
     def cancel_current_scan(self):
         """Cancels the ongoing scan (if applicable)."""

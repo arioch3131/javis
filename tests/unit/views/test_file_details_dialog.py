@@ -102,3 +102,38 @@ class TestFileDetailsDialog:
         dialog.clear_category_button.click()
 
         assert captured["path"] == "/tmp/example.png"
+
+    def test_open_file_button_enabled_only_when_file_path_exists(self):
+        dialog = FileDetailsDialog()
+
+        dialog.set_file_details({"file_path": ""})
+        assert not dialog.open_file_button.isEnabled()
+
+        dialog.set_file_details(
+            {
+                "file_path": "/tmp/example.png",
+                "metadata": {"size_formatted": "149 KB", "extension": ".png"},
+                "content_type": "image",
+                "classification": {"category": "Animals"},
+            }
+        )
+        assert dialog.open_file_button.isEnabled()
+
+    def test_open_file_button_emits_signal_with_current_file_path(self):
+        dialog = FileDetailsDialog()
+        captured = {"path": None}
+        dialog.open_file_requested.connect(
+            lambda path: captured.__setitem__("path", path)
+        )
+        dialog.set_file_details(
+            {
+                "file_path": "/tmp/example.png",
+                "metadata": {"size_formatted": "149 KB", "extension": ".png"},
+                "content_type": "image",
+                "classification": {"category": "Animals"},
+            }
+        )
+
+        dialog.open_file_button.click()
+
+        assert captured["path"] == "/tmp/example.png"

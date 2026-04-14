@@ -1,7 +1,51 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from ai_content_classifier.models.config_models import ConfigKey
+from ai_content_classifier.services.file.types import (
+    FileOperationCode,
+    FileOperationResult,
+)
 from ai_content_classifier.views.presenters.file_presenter import FilePresenter
+
+
+class _FakeSignal:
+    def __init__(self):
+        self._callbacks = []
+
+    def connect(self, callback):
+        self._callbacks.append(callback)
+
+    def emit(self, *args, **kwargs):
+        for callback in list(self._callbacks):
+            callback(*args, **kwargs)
+
+
+class _FakeFileDetailsDialog:
+    def __init__(self, _parent=None):
+        self.previous_requested = _FakeSignal()
+        self.next_requested = _FakeSignal()
+        self.open_file_requested = _FakeSignal()
+        self.clear_category_requested = _FakeSignal()
+
+    def set_file_details(self, _details):
+        return None
+
+    def set_navigation_state(self, _has_previous, _has_next):
+        return None
+
+    def show(self):
+        return None
+
+    def raise_(self):
+        return None
+
+    def activateWindow(self):
+        return None
+
+    def close(self):
+        return None
 
 
 def test_visible_file_paths_prefers_main_window_current_files():
@@ -218,3 +262,162 @@ def test_get_or_create_thumbnail_pixmap_generates_and_stores_bytes(monkeypatch):
     assert out is sentinel_pixmap
     presenter.thumbnail_cache.set.assert_called_once()
     assert isinstance(presenter.thumbnail_cache.set.call_args.args[1], bytes)
+
+
+def test_open_file_request_uses_file_service_and_does_not_warn_on_success():
+    main_window = MagicMock()
+    main_window.file_manager = MagicMock()
+    main_window.file_manager.file_service.open_file.return_value = MagicMock(
+        success=True, message="ok"
+    )
+    presenter = FilePresenter(main_window, MagicMock())
+
+    with patch(
+        "ai_content_classifier.views.presenters.file_presenter.QMessageBox.warning"
+    ) as warning_mock:
+        presenter._on_open_file_requested("/tmp/example.png")
+
+    main_window.file_manager.file_service.open_file.assert_called_once_with(
+        "/tmp/example.png"
+    )
+    warning_mock.assert_not_called()
+
+
+def test_open_file_request_shows_warning_on_failure():
+    main_window = MagicMock()
+    main_window.file_manager = MagicMock()
+    main_window.file_manager.file_service.open_file.return_value = FileOperationResult(
+        success=False,
+        code=FileOperationCode.FILE_NOT_FOUND,
+        message="File not found.",
+        data={"path": "/tmp/missing.png"},
+    )
+    presenter = FilePresenter(main_window, MagicMock())
+
+    with patch(
+        "ai_content_classifier.views.presenters.file_presenter.QMessageBox.warning"
+    ) as warning_mock:
+        presenter._on_open_file_requested("/tmp/missing.png")
+
+    warning_mock.assert_called_once()
+    assert warning_mock.call_args.args[2] == (
+        "File not found.\n"
+        "Please verify the file still exists and refresh the file list."
+    )
+
+
+@pytest.mark.parametrize(
+    ("operation_code", "service_message", "expected_ui_message"),
+    [
+        (
+            FileOperationCode.FILE_NOT_FOUND,
+            "File not found.",
+            "File not found.\nPlease verify the file still exists and refresh the file list.",
+        ),
+        (
+            FileOperationCode.NO_DEFAULT_APP,
+            "No default application is available.",
+            "No default app is configured for this file type.\nPlease set a default application and try again.",
+        ),
+        (
+            FileOperationCode.ACCESS_DENIED,
+            "Access denied while opening this file.",
+            "Access denied while opening this file.\nPlease check file permissions and try again.",
+        ),
+        (
+            FileOperationCode.UNKNOWN_ERROR,
+            "Unexpected system error.",
+            "Unexpected system error.\nPlease try again, and check system logs if the problem persists.",
+        ),
+    ],
+)
+def test_open_file_request_shows_actionable_error_message_to_ui(
+    operation_code, service_message, expected_ui_message
+):
+    main_window = MagicMock()
+    main_window.file_manager = MagicMock()
+    main_window.file_manager.file_service.open_file.return_value = FileOperationResult(
+        success=False,
+        code=operation_code,
+        message=service_message,
+        data={"path": "/tmp/failure.txt"},
+    )
+    presenter = FilePresenter(main_window, MagicMock())
+
+    with patch(
+        "ai_content_classifier.views.presenters.file_presenter.QMessageBox.warning"
+    ) as warning_mock:
+        presenter._on_open_file_requested("/tmp/failure.txt")
+
+    main_window.file_manager.file_service.open_file.assert_called_once_with(
+        "/tmp/failure.txt"
+    )
+    warning_mock.assert_called_once_with(main_window, "Open file", expected_ui_message)
+
+
+@pytest.mark.parametrize(
+    ("operation_code", "service_message", "expected_ui_message"),
+    [
+        (
+            FileOperationCode.FILE_NOT_FOUND,
+            "File not found.",
+            "File not found.\nPlease verify the file still exists and refresh the file list.",
+        ),
+        (
+            FileOperationCode.NO_DEFAULT_APP,
+            "No default application is available.",
+            "No default app is configured for this file type.\nPlease set a default application and try again.",
+        ),
+        (
+            FileOperationCode.ACCESS_DENIED,
+            "Access denied while opening this file.",
+            "Access denied while opening this file.\nPlease check file permissions and try again.",
+        ),
+        (
+            FileOperationCode.UNKNOWN_ERROR,
+            "Unexpected system error.",
+            "Unexpected system error.\nPlease try again, and check system logs if the problem persists.",
+        ),
+    ],
+)
+def test_open_file_details_dialog_signal_shows_actionable_error_message_to_ui(
+    operation_code, service_message, expected_ui_message
+):
+    main_window = MagicMock()
+    main_window.file_manager = MagicMock()
+    main_window.file_manager.file_service.open_file.return_value = FileOperationResult(
+        success=False,
+        code=operation_code,
+        message=service_message,
+        data={"path": "/tmp/from-dialog.txt"},
+    )
+    presenter = FilePresenter(main_window, MagicMock())
+    presenter._build_file_details = MagicMock(
+        return_value={
+            "file_path": "/tmp/from-dialog.txt",
+            "metadata": {"size_formatted": "1 KB", "extension": ".txt"},
+            "content_type": "document",
+            "classification": {"category": "Uncategorized"},
+        }
+    )
+
+    with (
+        patch(
+            "ai_content_classifier.views.presenters.file_presenter.FileDetailsDialog",
+            _FakeFileDetailsDialog,
+        ),
+        patch(
+            "ai_content_classifier.views.presenters.file_presenter.QMessageBox.warning"
+        ) as warning_mock,
+    ):
+        presenter.open_file_details_dialog("/tmp/from-dialog.txt")
+        assert presenter._details_dialog is not None
+        presenter._details_dialog.open_file_requested.emit("/tmp/from-dialog.txt")
+
+    main_window.file_manager.file_service.open_file.assert_called_once_with(
+        "/tmp/from-dialog.txt"
+    )
+    warning_mock.assert_called_once_with(main_window, "Open file", expected_ui_message)
+
+    if presenter._details_dialog is not None:
+        presenter._details_dialog.close()

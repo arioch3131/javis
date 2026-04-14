@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-04-14
+
+### Added
+- Added an `Open file` action in file details (`FileDetailsDialog`) with dedicated signal wiring (`open_file_requested(str)`).
+- Added a structured file-operation contract with `FileOperationResult` and `FileOperationCode` for consistent service/UI behavior.
+- Added dedicated file operation modules under `services/file/operations/` and accompanying documentation (`docs/FILE_OPERATIONS_V1.fr.md`).
+- Added targeted unit/integration coverage for open-file flow:
+  - service-level OS opening behavior and error mapping
+  - dialog signal/button states
+  - presenter/UI error-message propagation
+
+### Changed
+- Implemented cross-platform open-file behavior via default OS app:
+  - Windows: `os.startfile`
+  - macOS: `open`
+  - Linux: `xdg-open`
+- Improved failure handling in the UI with actionable error messages for:
+  - file not found (including non-file paths like folders/broken links)
+  - missing default app association
+  - access denied
+  - unexpected system errors
+
+### Fixed
+- Prevented UI crashes during open-file failures by enforcing safe-fail handling and preserving dialog state.
+- Improved diagnostics with warning/error logs around open-file failures and operation-level error context.
+
 ## [1.3.0] - 2026-04-13
 
 ### Added
