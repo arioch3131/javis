@@ -784,16 +784,13 @@ class TestContentReader:
         mock_db_session.query.return_value.order_by.assert_called()
 
     def test_session_transaction_handling(self, reader, mock_db_session):
-        """Test that session transaction handling works correctly."""
-        # Test that BEGIN IMMEDIATE is attempted for internal sessions
-        mock_db_session.execute.return_value = None
-        mock_db_session.rollback.return_value = None
+        """Test internal session lifecycle without manual transaction hack."""
         mock_db_session.query.return_value.all.return_value = []
 
         reader.find_items()
 
-        # Should attempt to execute transaction setup
-        mock_db_session.execute.assert_called()
+        mock_db_session.execute.assert_not_called()
+        mock_db_session.rollback.assert_not_called()
         mock_db_session.close.assert_called_once()
 
     # ==================== EDGE CASES AND ERROR CONDITIONS ====================

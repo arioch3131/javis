@@ -83,6 +83,14 @@ class QueryOptimizer:
                 return query.all()
             # If it is already a result
             return query
+        except Exception:
+            if not external_session:
+                try:
+                    session.rollback()
+                except Exception:
+                    # Preserve original query exception if rollback fails.
+                    pass
+            raise
 
         finally:
             if not external_session:

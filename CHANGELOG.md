@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-15
+
+### Changed
+- Merged reader behavior into one explicit implementation by moving enhanced/cached read logic into `ContentReader`.
+- Converted `EnhancedContentReader` to a transitional compatibility shim inheriting `ContentReader` (no implicit magic delegation).
+
+### Fixed
+- Added explicit rollback in `QueryOptimizer._execute_query` for internally managed sessions when query execution fails.
+- Removed the transactional anti-pattern `BEGIN IMMEDIATE` + immediate rollback from `ContentReader.find_items`.
+- Added non-regression tests for:
+  - rollback behavior in query optimizer (internal vs external session handling)
+  - explicit merged reader behavior and API parity
+  - content reader session lifecycle after transaction-pattern removal
+
 ## [1.4.0] - 2026-04-14
 
 ### Added
