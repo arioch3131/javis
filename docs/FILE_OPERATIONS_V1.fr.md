@@ -1,6 +1,9 @@
-# File Operations V1 (Draft)
+# File Operations V1.1 (Draft)
 
 Ce document décrit l'architecture des opérations fichier et le contrat de retour unifié basé sur `FileOperationResult`.
+
+Version du service documenté : `V1.1`  
+Introduit dans la release produit : `Javis v1.4.0`
 
 ## 1. Objectif
 
@@ -208,3 +211,8 @@ sequenceDiagram
   - doit implémenter `execute(...) -> FileOperationResult` ;
   - doit utiliser les clés `FileOperationDataKey` ;
   - doit être branchée via `FileOperationService`.
+
+## 10. Versionner le service
+
+- version actuelle du service : `V1.1`
+- release d'introduction dans Javis : `v1.4.0`

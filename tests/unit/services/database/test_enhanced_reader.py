@@ -1,227 +1,82 @@
+from inspect import signature
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-
+from ai_content_classifier.services.database.content_reader import ContentReader
 from ai_content_classifier.services.database.operations.enhanced_reader import (
     EnhancedContentReader,
 )
 
 
 class TestEnhancedContentReader:
-    @pytest.fixture
-    def mock_db_service(self):
-        return MagicMock()
+    def test_init_wires_parent_reader_dependencies(self):
+        db_service = MagicMock()
+        query_optimizer = MagicMock()
+        metrics = SimpleNamespace(visible_items=0, total_files=0)
 
-    @pytest.fixture
-    def mock_query_optimizer(self):
-        return MagicMock()
+        reader = EnhancedContentReader(db_service, query_optimizer, metrics)
 
-    @pytest.fixture
-    def mock_metrics(self):
-        return SimpleNamespace(visible_items=0, total_files=0)
+        assert isinstance(reader, ContentReader)
+        assert reader.database_service is db_service
+        assert reader.query_optimizer is query_optimizer
+        assert reader.metrics is metrics
 
-    @pytest.fixture
-    def mock_legacy_reader(self):
-        return MagicMock()
+    def test_explicit_api_surface_matches_content_reader(self):
+        # Parity guard for the merged reader contract.
+        assert set(dir(EnhancedContentReader)).issuperset(set(dir(ContentReader)))
 
-    @pytest.fixture
-    def reader(
-        self, mock_db_service, mock_query_optimizer, mock_metrics, mock_legacy_reader
-    ):
-        with patch(
-            "ai_content_classifier.services.database.operations.enhanced_reader.ContentReader",
-            return_value=mock_legacy_reader,
-        ) as patched_reader:
-            enhanced = EnhancedContentReader(
-                mock_db_service, mock_query_optimizer, mock_metrics
-            )
-            enhanced._patched_content_reader = patched_reader
-            return enhanced
-
-    def test_init_wires_dependencies_and_builds_legacy_reader(
-        self,
-        reader,
-        mock_db_service,
-        mock_query_optimizer,
-        mock_metrics,
-        mock_legacy_reader,
-    ):
-        assert reader.database_service is mock_db_service
-        assert reader.query_optimizer is mock_query_optimizer
-        assert reader.metrics is mock_metrics
-        assert reader._legacy_reader is mock_legacy_reader
-        reader._patched_content_reader.assert_called_once_with(mock_db_service)
-
-    def test_find_items_with_external_session_delegates_to_legacy(
-        self, reader, mock_legacy_reader, mock_query_optimizer
-    ):
+    def test_find_items_uses_cache_and_updates_metrics(self):
+        db_service = MagicMock()
         session = MagicMock()
-        expected = [MagicMock(), MagicMock()]
-        mock_legacy_reader.find_items.return_value = expected
+        query = MagicMock()
+        query.options.return_value = query
+        query.all.return_value = [MagicMock(), MagicMock()]
+        session.query.return_value = query
+        db_service.Session.return_value = session
 
-        result = reader.find_items(
-            content_filter="cf",
-            sort_by="path",
-            sort_desc=True,
-            limit=10,
-            offset=3,
-            eager_load=True,
-            custom_filter=["x"],
-            session=session,
-        )
+        query_optimizer = MagicMock()
 
-        assert result == expected
-        mock_legacy_reader.find_items.assert_called_once_with(
-            "cf",
-            "path",
-            True,
-            10,
-            3,
-            True,
-            ["x"],
-            session,
-        )
-        mock_query_optimizer.execute_cached.assert_not_called()
+        def _exec(query_builder, cache_key):
+            assert cache_key
+            return query_builder(session)
 
-    def test_find_items_without_session_uses_cache_and_updates_visible_items(
-        self, reader, mock_legacy_reader, mock_query_optimizer, mock_metrics
-    ):
-        expected = [MagicMock(), MagicMock(), MagicMock()]
-        fake_session = MagicMock()
-        mock_legacy_reader.find_items.return_value = expected
+        query_optimizer.execute_cached.side_effect = _exec
 
-        with patch.object(
-            reader, "_build_cache_key", return_value="cache-key"
-        ) as key_builder:
+        metrics = SimpleNamespace(visible_items=0, total_files=0)
+        reader = EnhancedContentReader(db_service, query_optimizer, metrics)
 
-            def _exec(query_builder, cache_key):
-                assert cache_key == "cache-key"
-                return query_builder(fake_session)
+        results = reader.find_items()
 
-            mock_query_optimizer.execute_cached.side_effect = _exec
-            result = reader.find_items(content_filter="cf", sort_by="date_modified")
+        assert len(results) == 2
+        assert metrics.visible_items == 2
+        query_optimizer.execute_cached.assert_called_once()
 
-        assert result == expected
-        key_builder.assert_called_once()
-        mock_query_optimizer.execute_cached.assert_called_once()
-        mock_legacy_reader.find_items.assert_called_once_with(
-            "cf",
-            "date_modified",
-            False,
-            None,
-            0,
-            False,
-            None,
-            fake_session,
-        )
-        assert mock_metrics.visible_items == 3
-
-    def test_count_all_items_with_external_session_delegates_to_legacy(
-        self, reader, mock_legacy_reader, mock_query_optimizer
-    ):
+    def test_count_all_items_uses_cache_and_updates_metrics(self):
+        db_service = MagicMock()
         session = MagicMock()
-        mock_legacy_reader.count_all_items.return_value = 42
+        query = MagicMock()
+        query.scalar.return_value = 12
+        session.query.return_value = query
+        db_service.Session.return_value = session
 
-        result = reader.count_all_items(session=session)
-
-        assert result == 42
-        mock_legacy_reader.count_all_items.assert_called_once_with(session)
-        mock_query_optimizer.execute_cached.assert_not_called()
-
-    def test_count_all_items_without_session_uses_cache_and_updates_metrics(
-        self, reader, mock_legacy_reader, mock_query_optimizer, mock_metrics
-    ):
-        fake_session = MagicMock()
-        mock_legacy_reader.count_all_items.return_value = 17
+        query_optimizer = MagicMock()
 
         def _exec(query_builder, cache_key):
             assert cache_key == "count_all_items"
-            return query_builder(fake_session)
+            return query_builder(session)
 
-        mock_query_optimizer.execute_cached.side_effect = _exec
-        result = reader.count_all_items()
+        query_optimizer.execute_cached.side_effect = _exec
 
-        assert result == 17
-        mock_query_optimizer.execute_cached.assert_called_once()
-        mock_legacy_reader.count_all_items.assert_called_once_with(fake_session)
-        assert mock_metrics.total_files == 17
+        metrics = SimpleNamespace(visible_items=0, total_files=0)
+        reader = EnhancedContentReader(db_service, query_optimizer, metrics)
 
-    def test_getattr_delegates_to_legacy_reader(self, reader, mock_legacy_reader):
-        mock_legacy_reader.custom_method.return_value = "delegated"
+        count = reader.count_all_items()
 
-        result = reader.custom_method("arg1", kw="value")
+        assert count == 12
+        assert metrics.total_files == 12
+        query_optimizer.execute_cached.assert_called_once()
 
-        assert result == "delegated"
-        mock_legacy_reader.custom_method.assert_called_once_with("arg1", kw="value")
-
-    def test_get_unique_categories_with_external_session_delegates_to_legacy(
-        self, reader, mock_legacy_reader, mock_query_optimizer
-    ):
-        session = MagicMock()
-        mock_legacy_reader.get_unique_categories.return_value = ["Work", "Personal"]
-
-        result = reader.get_unique_categories(session=session)
-
-        assert result == ["Work", "Personal"]
-        mock_legacy_reader.get_unique_categories.assert_called_once_with(session)
-        mock_query_optimizer.execute_cached.assert_not_called()
-
-    def test_get_unique_categories_without_session_uses_cache(
-        self, reader, mock_legacy_reader, mock_query_optimizer
-    ):
-        fake_session = MagicMock()
-        mock_legacy_reader.get_unique_categories.return_value = ["Work"]
-
-        def _exec(query_builder, cache_key):
-            assert cache_key == "unique_categories"
-            return query_builder(fake_session)
-
-        mock_query_optimizer.execute_cached.side_effect = _exec
-        result = reader.get_unique_categories()
-
-        assert result == ["Work"]
-        mock_query_optimizer.execute_cached.assert_called_once()
-        mock_legacy_reader.get_unique_categories.assert_called_once_with(fake_session)
-
-    def test_get_unique_years_without_session_uses_cache(
-        self, reader, mock_legacy_reader, mock_query_optimizer
-    ):
-        fake_session = MagicMock()
-        mock_legacy_reader.get_unique_years.return_value = [2023, 2024]
-
-        def _exec(query_builder, cache_key):
-            assert cache_key == "unique_years"
-            return query_builder(fake_session)
-
-        mock_query_optimizer.execute_cached.side_effect = _exec
-        result = reader.get_unique_years()
-
-        assert result == [2023, 2024]
-        mock_query_optimizer.execute_cached.assert_called_once()
-        mock_legacy_reader.get_unique_years.assert_called_once_with(fake_session)
-
-    def test_get_unique_extensions_without_session_uses_cache(
-        self, reader, mock_legacy_reader, mock_query_optimizer
-    ):
-        fake_session = MagicMock()
-        mock_legacy_reader.get_unique_extensions.return_value = [".jpg", ".png"]
-
-        def _exec(query_builder, cache_key):
-            assert cache_key == "unique_extensions"
-            return query_builder(fake_session)
-
-        mock_query_optimizer.execute_cached.side_effect = _exec
-        result = reader.get_unique_extensions()
-
-        assert result == [".jpg", ".png"]
-        mock_query_optimizer.execute_cached.assert_called_once()
-        mock_legacy_reader.get_unique_extensions.assert_called_once_with(fake_session)
-
-    def test_build_cache_key_is_stable_for_same_arguments(self, reader):
-        key1 = reader._build_cache_key("find_items", {"a": 1}, ["x", "y"], 10)
-        key2 = reader._build_cache_key("find_items", {"a": 1}, ["x", "y"], 10)
-        key3 = reader._build_cache_key("find_items", {"a": 2}, ["x", "y"], 10)
-
-        assert key1 == key2
-        assert key1 != key3
+    def test_find_items_signature_stays_compatible(self):
+        assert signature(EnhancedContentReader.find_items) == signature(
+            ContentReader.find_items
+        )

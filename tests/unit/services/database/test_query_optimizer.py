@@ -127,6 +127,30 @@ class TestQueryOptimizer:
         assert result == ["row"]
         session.close.assert_not_called()
 
+    def test_execute_query_rolls_back_internal_session_on_exception(
+        self, optimizer, mock_db_service
+    ):
+        with pytest.raises(RuntimeError, match="boom"):
+            optimizer._execute_query(
+                lambda _s: (_ for _ in ()).throw(RuntimeError("boom")), None
+            )
+
+        mock_db_service.Session.return_value.rollback.assert_called_once()
+        mock_db_service.Session.return_value.close.assert_called_once()
+
+    def test_execute_query_does_not_rollback_external_session_on_exception(
+        self, optimizer
+    ):
+        session = MagicMock()
+
+        with pytest.raises(RuntimeError, match="boom"):
+            optimizer._execute_query(
+                lambda _s: (_ for _ in ()).throw(RuntimeError("boom")), session
+            )
+
+        session.rollback.assert_not_called()
+        session.close.assert_not_called()
+
     def test_generate_cache_key_with_source(self, optimizer):
         def query_builder(_session):
             return []

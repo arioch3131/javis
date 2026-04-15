@@ -4,6 +4,8 @@ operations on the content database.
 """
 
 import datetime
+import hashlib
+import json
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -21,11 +23,70 @@ from ai_content_classifier.services.database.database_service import DatabaseSer
 class ContentReader(LoggableMixin):
     """Handles all read-only database operations for content items."""
 
-    def __init__(self, database_service: DatabaseService):
+    def __init__(
+        self,
+        database_service: DatabaseService,
+        query_optimizer: Optional[Any] = None,
+        metrics: Optional[Any] = None,
+    ):
         self.__init_logger__()
         self.database_service = database_service
+        self.query_optimizer = query_optimizer
+        self.metrics = metrics
 
     def find_items(
+        self,
+        content_filter: Optional[ContentFilter] = None,
+        sort_by: Optional[str] = None,
+        sort_desc: bool = False,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        eager_load: bool = False,
+        custom_filter: Optional[List[Any]] = None,
+        session: Optional[Session] = None,
+    ) -> List[ContentItem]:
+        if session is not None or self.query_optimizer is None:
+            results = self._find_items_uncached(
+                content_filter=content_filter,
+                sort_by=sort_by,
+                sort_desc=sort_desc,
+                limit=limit,
+                offset=offset,
+                eager_load=eager_load,
+                custom_filter=custom_filter,
+                session=session,
+            )
+        else:
+            cache_key = self._build_cache_key(
+                "find_items",
+                getattr(content_filter, "criteria", None) if content_filter else None,
+                sort_by,
+                sort_desc,
+                limit,
+                offset,
+                eager_load,
+                custom_filter,
+            )
+
+            results = self.query_optimizer.execute_cached(
+                lambda cached_session: self._find_items_uncached(
+                    content_filter=content_filter,
+                    sort_by=sort_by,
+                    sort_desc=sort_desc,
+                    limit=limit,
+                    offset=offset,
+                    eager_load=eager_load,
+                    custom_filter=custom_filter,
+                    session=cached_session,
+                ),
+                cache_key=cache_key,
+            )
+
+        if self.metrics is not None and hasattr(self.metrics, "visible_items"):
+            self.metrics.visible_items = len(results)
+        return results
+
+    def _find_items_uncached(
         self,
         content_filter: Optional[ContentFilter] = None,
         sort_by: Optional[str] = None,
@@ -40,13 +101,6 @@ class ContentReader(LoggableMixin):
         session = session or self.database_service.Session()
 
         try:
-            if not external_session:
-                try:
-                    session.execute("BEGIN IMMEDIATE;")
-                    session.rollback()
-                except Exception:
-                    pass
-
             query = self._build_find_query(
                 session=session,
                 content_filter=content_filter,
@@ -90,6 +144,19 @@ class ContentReader(LoggableMixin):
                 session.close()
 
     def count_all_items(self, session: Optional[Session] = None) -> int:
+        if session is None and self.query_optimizer is not None:
+            count = self.query_optimizer.execute_cached(
+                lambda cached_session: self._count_all_items_uncached(cached_session),
+                cache_key="count_all_items",
+            )
+        else:
+            count = self._count_all_items_uncached(session)
+
+        if self.metrics is not None and hasattr(self.metrics, "total_files"):
+            self.metrics.total_files = count
+        return count
+
+    def _count_all_items_uncached(self, session: Optional[Session] = None) -> int:
         external_session = session is not None
         session = session or self.database_service.Session()
 
@@ -339,6 +406,18 @@ class ContentReader(LoggableMixin):
         return query
 
     def get_unique_categories(self, session: Optional[Session] = None) -> List[str]:
+        if session is None and self.query_optimizer is not None:
+            return self.query_optimizer.execute_cached(
+                lambda cached_session: self._get_unique_categories_uncached(
+                    cached_session
+                ),
+                cache_key="unique_categories",
+            )
+        return self._get_unique_categories_uncached(session)
+
+    def _get_unique_categories_uncached(
+        self, session: Optional[Session] = None
+    ) -> List[str]:
         external_session = session is not None
         session = session or self.database_service.Session()
         try:
@@ -358,6 +437,16 @@ class ContentReader(LoggableMixin):
                 session.close()
 
     def get_unique_years(self, session: Optional[Session] = None) -> List[int]:
+        if session is None and self.query_optimizer is not None:
+            return self.query_optimizer.execute_cached(
+                lambda cached_session: self._get_unique_years_uncached(cached_session),
+                cache_key="unique_years",
+            )
+        return self._get_unique_years_uncached(session)
+
+    def _get_unique_years_uncached(
+        self, session: Optional[Session] = None
+    ) -> List[int]:
         external_session = session is not None
         session = session or self.database_service.Session()
         try:
@@ -485,6 +574,18 @@ class ContentReader(LoggableMixin):
         return year if 1900 <= year <= 2100 else None
 
     def get_unique_extensions(self, session: Optional[Session] = None) -> List[str]:
+        if session is None and self.query_optimizer is not None:
+            return self.query_optimizer.execute_cached(
+                lambda cached_session: self._get_unique_extensions_uncached(
+                    cached_session
+                ),
+                cache_key="unique_extensions",
+            )
+        return self._get_unique_extensions_uncached(session)
+
+    def _get_unique_extensions_uncached(
+        self, session: Optional[Session] = None
+    ) -> List[str]:
         external_session = session is not None
         session = session or self.database_service.Session()
         try:
@@ -510,3 +611,7 @@ class ContentReader(LoggableMixin):
         finally:
             if not external_session:
                 session.close()
+
+    def _build_cache_key(self, *args: Any) -> str:
+        key_data = json.dumps(args, default=str, sort_keys=True)
+        return hashlib.md5(key_data.encode()).hexdigest()
