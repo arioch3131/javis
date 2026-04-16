@@ -596,10 +596,18 @@ class FileOperationService(LoggableMixin):
 
         for index in range(0, len(unique_paths), batch_size):
             batch_paths = unique_paths[index : index + batch_size]
-            batch_items = self.db_service.find_items(
+            batch_result = self.db_service.find_items(
                 custom_filter=[ContentItem.path.in_(batch_paths)],
                 eager_load=False,
             )
+            if not batch_result.success:
+                self.logger.warning(
+                    "Batch DB read failed for file map: code=%s message=%s",
+                    batch_result.code,
+                    batch_result.message,
+                )
+                continue
+            batch_items = (batch_result.data or {}).get("items", [])
             for item in batch_items:
                 if hasattr(item, "path"):
                     path_to_item[item.path] = item
@@ -697,7 +705,15 @@ class FileOperationService(LoggableMixin):
         """Filter files that are uncategorized."""
         try:
             # Use find_items() instead of get_all_content_items()
-            all_files = self.db_service.find_items()
+            all_files_result = self.db_service.find_items()
+            if not all_files_result.success:
+                self.logger.warning(
+                    "Unable to load uncategorized candidates from DB: code=%s message=%s",
+                    all_files_result.code,
+                    all_files_result.message,
+                )
+                return []
+            all_files = (all_files_result.data or {}).get("items", [])
             filtered_files = []
 
             for content_item in all_files:

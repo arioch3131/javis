@@ -8,6 +8,7 @@ from ai_content_classifier.core.logger import LoggableMixin
 from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
+from ai_content_classifier.services.database.types import DatabaseOperationCode
 from ai_content_classifier.services.file.scan_models import ScanProgress
 from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.file.scanners.base_scanner import BaseScanner
@@ -208,7 +209,15 @@ class ScanPipelineService(LoggableMixin):
         }
 
         try:
-            existing_item = self.db_service.get_content_by_path(file_path)
+            existing_item_result = self.db_service.get_content_by_path(file_path)
+            if not existing_item_result.success and (
+                existing_item_result.code != DatabaseOperationCode.NOT_FOUND
+            ):
+                raise RuntimeError(
+                    existing_item_result.message
+                    or f"DB read failed for path: {file_path}"
+                )
+            existing_item = (existing_item_result.data or {}).get("item")
             if existing_item:
                 result["success"] = True
                 return result
@@ -218,12 +227,14 @@ class ScanPipelineService(LoggableMixin):
                 result["metadata_success"] = True
 
             content_type = self._determine_content_type(file_path)
-            self.db_service.create_content_item(
+            db_result = self.db_service.create_content_item(
                 path=file_path,
                 content_type=content_type,
                 extract_basic_info=True,
                 metadata=metadata,
             )
+            if not db_result.success:
+                raise RuntimeError(db_result.message or "Failed to persist file to DB.")
             result["success"] = True
         except Exception as e:
             self.logger.error(f"Error processing single file {file_path}: {e}")

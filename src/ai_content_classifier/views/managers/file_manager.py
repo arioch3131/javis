@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from ai_content_classifier.services.config_service import ConfigService
-from ai_content_classifier.services.content_database_service import (
+from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
 from ai_content_classifier.services.file.file_operation_service import (
@@ -1140,7 +1140,11 @@ class FileManager(QObject):
         """Clears all content items from the database."""
         self.logger.info("Clearing all content from the database...")
         try:
-            self.file_service.db_service.clear_all_content()
+            db_result = self.file_service.db_service.clear_all_content()
+            if not db_result.success:
+                raise RuntimeError(
+                    db_result.message or "Unable to clear content database."
+                )
             if hasattr(self.file_service, "clear_thumbnail_disk_cache"):
                 self.file_service.clear_thumbnail_disk_cache()
             if hasattr(self.file_service, "thumbnail_service") and hasattr(

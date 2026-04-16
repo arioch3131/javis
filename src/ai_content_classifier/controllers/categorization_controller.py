@@ -15,6 +15,7 @@ from ai_content_classifier.core.logger import get_logger
 from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
+from ai_content_classifier.services.database.types import DatabaseOperationCode
 from ai_content_classifier.services.file.operations import FileOperationDataKey
 from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.llm.llm_service import LLMService
@@ -142,13 +143,17 @@ class CategorizationWorker(QThread):
 
                 # Save the result to the database
                 if self.config.get("save_results", True):
-                    self.content_database_service.update_content_category(
+                    db_result = self.content_database_service.update_content_category(
                         file_path=file_path,
                         category=final_category,
                         confidence=result.confidence,
                         extraction_method=result.extraction_method,
                         extraction_details=result.extraction_details,
                     )
+                    if not db_result.success:
+                        self.log_message.emit(
+                            f"Failed to save category for {os.path.basename(file_path)}: {db_result.message}"
+                        )
 
                 self.results.append(
                     {
@@ -241,7 +246,13 @@ class CategorizationWorker(QThread):
             category.strip() for category in self.categories if category
         }
         try:
-            duplicates_by_hash = self.content_database_service.find_duplicates()
+            duplicates_result = self.content_database_service.find_duplicates()
+            if not duplicates_result.success:
+                self.log_message.emit(
+                    f"Duplicate cache unavailable: {duplicates_result.message}"
+                )
+                return
+            duplicates_by_hash = (duplicates_result.data or {}).get("duplicates", {})
             for file_hash, items in duplicates_by_hash.items():
                 if not file_hash or not items:
                     continue
@@ -283,7 +294,17 @@ class CategorizationWorker(QThread):
         Reuse an existing categorization for files with the same file hash.
         """
         try:
-            content_item = self.content_database_service.get_content_by_path(file_path)
+            content_item_result = self.content_database_service.get_content_by_path(
+                file_path
+            )
+            if not content_item_result.success and (
+                content_item_result.code != DatabaseOperationCode.NOT_FOUND
+            ):
+                self.log_message.emit(
+                    f"Unable to load item for duplicate reuse: {content_item_result.message}"
+                )
+                return None
+            content_item = (content_item_result.data or {}).get("item")
             if not content_item:
                 return None
 
@@ -298,13 +319,15 @@ class CategorizationWorker(QThread):
                 return None
 
             if self.config.get("save_results", True):
-                self.content_database_service.update_content_category(
+                db_result = self.content_database_service.update_content_category(
                     file_path=file_path,
                     category=reused["category"],
                     confidence=float(reused["confidence"]),
                     extraction_method=reused["extraction_method"],
                     extraction_details=reused["extraction_details"],
                 )
+                if not db_result.success:
+                    return None
 
             self.log_message.emit(
                 f"Duplicate hash reuse: {os.path.basename(file_path)} -> {reused['category']}"
@@ -616,9 +639,21 @@ class CategorizationController(QObject):
 
             # If only uncategorized is selected, check if the file is already categorized
             if only_uncategorized:
-                content_item = self.content_database_service.get_content_by_path(
+                content_item_result = self.content_database_service.get_content_by_path(
                     file_path
                 )
+                if not content_item_result.success and (
+                    content_item_result.code != DatabaseOperationCode.NOT_FOUND
+                ):
+                    self.logger.warning(
+                        "Unable to load content item for uncategorized filter '%s': code=%s message=%s",
+                        file_path,
+                        content_item_result.code,
+                        content_item_result.message,
+                    )
+                    filtered.append(file_path)
+                    continue
+                content_item = (content_item_result.data or {}).get("item")
                 if (
                     content_item
                     and content_item.category is not None
@@ -938,7 +973,7 @@ class CategorizationController(QObject):
         self.logger.info(f"Saving {len(results)} results to database...")
         for result in results:
             try:
-                self.content_database_service.update_content_category(
+                db_result = self.content_database_service.update_content_category(
                     file_path=result["file_path"],
                     category=result["category"],
                     confidence=result["confidence"],
@@ -949,6 +984,12 @@ class CategorizationController(QObject):
                         "extraction_details", "Automatic categorization"
                     ),
                 )
+                if not db_result.success:
+                    self.logger.error(
+                        "Error saving category for %s: %s",
+                        result["file_path"],
+                        db_result.message,
+                    )
             except Exception as e:
                 self.logger.error(
                     f"Error saving category for {result['file_path']}: {e}"

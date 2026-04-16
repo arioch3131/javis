@@ -9,6 +9,28 @@ from ai_content_classifier.services.auto_organization_service import (
     OrganizationConfig,
     OrganizationResult,
 )
+from ai_content_classifier.services.database.types import (
+    DatabaseOperationCode,
+    DatabaseOperationResult,
+)
+
+
+def _db_ok(**data):
+    return DatabaseOperationResult(
+        success=True,
+        code=DatabaseOperationCode.OK,
+        message="ok",
+        data=data,
+    )
+
+
+def _db_not_found():
+    return DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.NOT_FOUND,
+        message="not found",
+        data={"item": None},
+    )
 
 
 @pytest.fixture
@@ -74,7 +96,9 @@ def test_validate_config_rejects_missing_parent_dir(service, tmp_path):
 def test_prepare_target_structure_by_category_creates_sanitized_dirs(
     service, db_service, tmp_path
 ):
-    db_service.get_unique_categories.return_value = ["Work/Docs", "CON"]
+    db_service.get_unique_categories.return_value = _db_ok(
+        categories=["Work/Docs", "CON"]
+    )
     target = tmp_path / "organized"
     config = OrganizationConfig(
         target_directory=str(target),
@@ -131,7 +155,9 @@ def test_organize_single_file_by_category_copy_handles_name_conflict(
     category_dir.mkdir(parents=True)
     (category_dir / "report.txt").write_text("existing", encoding="utf-8")
 
-    db_service.get_content_by_path.return_value = SimpleNamespace(category="Work")
+    db_service.get_content_by_path.return_value = _db_ok(
+        item=SimpleNamespace(category="Work")
+    )
     config = OrganizationConfig(
         target_directory=str(target_root),
         organization_structure="By Category",
@@ -154,8 +180,8 @@ def test_organize_single_file_by_year_uses_creation_date_year(
     source = tmp_path / "invoice.pdf"
     source.write_text("pdf", encoding="utf-8")
 
-    db_service.get_content_by_path.return_value = SimpleNamespace(
-        creation_date=datetime(2021, 5, 4)
+    db_service.get_content_by_path.return_value = _db_ok(
+        item=SimpleNamespace(creation_date=datetime(2021, 5, 4))
     )
     config = OrganizationConfig(
         target_directory=str(tmp_path / "target"),
@@ -174,7 +200,9 @@ def test_organize_single_file_by_type_category_move(service, db_service, tmp_pat
     source = tmp_path / "photo.jpg"
     source.write_bytes(b"img")
 
-    db_service.get_content_by_path.return_value = SimpleNamespace(category="Travel")
+    db_service.get_content_by_path.return_value = _db_ok(
+        item=SimpleNamespace(category="Travel")
+    )
     config = OrganizationConfig(
         target_directory=str(tmp_path / "target"),
         organization_structure="By Type/Category",
@@ -237,7 +265,7 @@ def test_get_organization_preview_builds_structure_and_detects_conflict(
         target_directory=str(target),
         organization_structure="By Type",
     )
-    db_service.get_content_by_path.return_value = None
+    db_service.get_content_by_path.return_value = _db_not_found()
 
     preview = service.get_organization_preview([str(source)], config)
 
@@ -269,7 +297,7 @@ def test_internal_extractors_and_helpers_cover_fallbacks(
     )
     assert isinstance(service._extract_year("/tmp/missing", None), int)
 
-    db_service.get_unique_categories.return_value = []
+    db_service.get_unique_categories.return_value = _db_ok(categories=[])
     assert "Work" in service._get_available_categories()
     db_service.get_unique_categories.side_effect = RuntimeError("broken")
     assert "Personal" in service._get_available_categories()
@@ -279,10 +307,33 @@ def test_internal_extractors_and_helpers_cover_fallbacks(
     assert service._sanitize_dirname("CON") == "CON_folder"
 
 
+def test_safe_get_content_item_handles_non_not_found_db_failure(service, db_service):
+    db_service.get_content_by_path.return_value = DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.DB_ERROR,
+        message="db read error",
+        data={"error": "db"},
+    )
+    assert service._safe_get_content_item("/tmp/file.txt") is None
+
+
+def test_get_available_categories_handles_failed_result_object(service, db_service):
+    db_service.get_unique_categories.return_value = DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.DB_ERROR,
+        message="db read error",
+        data={"error": "db"},
+    )
+    categories = service._get_available_categories()
+    assert "Work" in categories
+
+
 def test_organize_custom_and_resolve_name_conflicts(service, db_service, tmp_path):
     source = tmp_path / "doc.txt"
     source.write_text("x", encoding="utf-8")
-    db_service.get_content_by_path.return_value = SimpleNamespace(category="Work")
+    db_service.get_content_by_path.return_value = _db_ok(
+        item=SimpleNamespace(category="Work")
+    )
 
     config = OrganizationConfig(
         target_directory=str(tmp_path / "target"),

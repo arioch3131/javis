@@ -29,13 +29,43 @@ class RefreshFileListOperation:
 
             # Log database state for debugging purposes.
             if hasattr(self.db_service, "count_all_items"):
-                total_count = self.db_service.count_all_items()
+                count_result = self.db_service.count_all_items()
+                if not count_result.success:
+                    self.logger.warning(
+                        "Unable to count DB items before refresh: code=%s message=%s",
+                        count_result.code,
+                        count_result.message,
+                    )
+                total_count = int((count_result.data or {}).get("count", 0))
                 self.logger.info(
                     f"Total items in database before refresh: {total_count}."
                 )
 
             # Retrieve all content items from the database.
-            all_content = self.db_service.find_items(eager_load=False)
+            all_content_result = self.db_service.find_items(eager_load=False)
+            if not all_content_result.success:
+                self.logger.warning(
+                    "Unable to refresh file list from DB: code=%s message=%s",
+                    all_content_result.code,
+                    all_content_result.message,
+                )
+                return FileOperationResult(
+                    success=False,
+                    code=FileOperationCode.UNKNOWN_ERROR,
+                    message=all_content_result.message
+                    or "Unable to retrieve content items from database.",
+                    data={
+                        FileOperationDataKey.ERROR.value: (
+                            all_content_result.data or {}
+                        ).get(
+                            "error",
+                            all_content_result.message,
+                        ),
+                        FileOperationDataKey.FILE_LIST.value: current_files.copy(),
+                        FileOperationDataKey.CONTENT_BY_PATH.value: {},
+                    },
+                )
+            all_content = (all_content_result.data or {}).get("items", [])
             self.logger.info(f"Retrieved {len(all_content)} items from database.")
 
             # Convert retrieved content items into the expected (file_path, directory) format.

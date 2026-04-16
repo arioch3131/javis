@@ -35,9 +35,27 @@ class ScanUiRefreshWorker(QThread):
 
         while self._running:
             try:
-                current_count = self.db_service.count_all_items()
+                count_result = self.db_service.count_all_items()
+                if not count_result.success:
+                    self.logger.warning(
+                        "Count read failed: code=%s message=%s",
+                        count_result.code,
+                        count_result.message,
+                    )
+                    self.refresh_error.emit(count_result.message)
+                    continue
+                current_count = int((count_result.data or {}).get("count", 0))
                 if current_count != self._last_count:
-                    items = self.db_service.find_items(eager_load=False)
+                    items_result = self.db_service.find_items(eager_load=False)
+                    if not items_result.success:
+                        self.logger.warning(
+                            "Items read failed: code=%s message=%s",
+                            items_result.code,
+                            items_result.message,
+                        )
+                        self.refresh_error.emit(items_result.message)
+                        continue
+                    items = (items_result.data or {}).get("items", [])
                     file_list: List[Tuple[str, str]] = []
                     for item in items:
                         if hasattr(item, "path") and hasattr(item, "directory"):

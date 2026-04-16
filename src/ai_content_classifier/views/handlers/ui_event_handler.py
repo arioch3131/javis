@@ -22,7 +22,7 @@ from ai_content_classifier.controllers.llm_controller import LLMController
 from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QModelIndex, QObject, Qt
 from PyQt6.QtWidgets import QDialog, QFileDialog, QMessageBox, QTreeWidgetItem
-from ai_content_classifier.services.content_database_service import (
+from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
 from ai_content_classifier.views.main_window import MainWindow
@@ -513,7 +513,21 @@ class UIEventHandler(QObject):
         """Handles the request to filter by category."""
         self.logger.info("Category filter request received.")
         try:
-            categories = self.content_database_service.get_unique_categories()
+            categories_result = self.content_database_service.get_unique_categories()
+            if not categories_result.success:
+                self.logger.warning(
+                    "Unable to load categories: code=%s message=%s",
+                    categories_result.code,
+                    categories_result.message,
+                )
+                QMessageBox.warning(
+                    self.main_window,
+                    "Database Error",
+                    categories_result.message
+                    or "Unable to load categories from database.",
+                )
+                return
+            categories = (categories_result.data or {}).get("categories", [])
             if not categories:
                 QMessageBox.information(
                     self.main_window,
@@ -540,7 +554,20 @@ class UIEventHandler(QObject):
         """Handles the request to filter by year."""
         self.logger.info("Year filter request received.")
         try:
-            years = [str(y) for y in self.content_database_service.get_unique_years()]
+            years_result = self.content_database_service.get_unique_years()
+            if not years_result.success:
+                self.logger.warning(
+                    "Unable to load years: code=%s message=%s",
+                    years_result.code,
+                    years_result.message,
+                )
+                QMessageBox.warning(
+                    self.main_window,
+                    "Database Error",
+                    years_result.message or "Unable to load years from database.",
+                )
+                return
+            years = [str(y) for y in (years_result.data or {}).get("years", [])]
             if not years:
                 QMessageBox.information(
                     self.main_window,
@@ -567,7 +594,21 @@ class UIEventHandler(QObject):
         """Handles the request to filter by extension."""
         self.logger.info("Extension filter request received.")
         try:
-            extensions = self.content_database_service.get_unique_extensions()
+            extensions_result = self.content_database_service.get_unique_extensions()
+            if not extensions_result.success:
+                self.logger.warning(
+                    "Unable to load extensions: code=%s message=%s",
+                    extensions_result.code,
+                    extensions_result.message,
+                )
+                QMessageBox.warning(
+                    self.main_window,
+                    "Database Error",
+                    extensions_result.message
+                    or "Unable to load extensions from database.",
+                )
+                return
+            extensions = (extensions_result.data or {}).get("extensions", [])
             if not extensions:
                 QMessageBox.information(
                     self.main_window,

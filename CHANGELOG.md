@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-04-16
+
+### Added
+- Added a unified DB mutation contract in `services/database/types.py`:
+  - `DatabaseOperationCode`
+  - `DatabaseOperationResult`
+  - canonical `data` keys (`deleted_count`, `ignored_count`, `failed_ids`, `failed_paths`, `normalized_paths`, `error`)
+
+### Changed
+- Refactored `ContentWriter` so all public mutations return `DatabaseOperationResult`:
+  - `create_content_item`
+  - `save_item_batch`
+  - `update_metadata_batch`
+  - `update_content_category`
+  - `clear_content_category`
+  - `clear_all_content`
+  - `delete_content_by_paths`
+- Refactored `ContentReader` so all public reads now return `DatabaseOperationResult` internally:
+  - `find_items`, `count_all_items`, `get_items_pending_metadata`, `find_duplicates`
+  - `get_statistics`, `get_content_by_path`, `get_uncategorized_items`
+  - `get_unique_categories`, `get_unique_years`, `get_unique_extensions`
+- Refactored `ContentDatabaseService` into a thinner facade:
+  - reads now return `DatabaseOperationResult` publicly (no facade unwrapping)
+  - reads delegate directly to `ContentReader` with aligned contracts
+  - writes delegate to `ContentWriter` with cache invalidation on success
+  - `get_unique_*` signatures now accept `session: Optional[Session] = None`
+  - `force_database_sync` now uses `DatabaseService.get_session()`
+- Updated UI/service call-sites to consume structured DB results for both write and read paths (file scan pipeline, file presenter, refresh/filter operations, UI handlers, categorization controller, auto-organization service).
+- Removed legacy DB package split by migrating `QueryOptimizer` to `services/database/query_optimizer.py` and dropping `services/database/core` and `services/database/operations`.
+
+### Fixed
+- Stopped propagating raw SQLAlchemy exceptions through UI-facing DB mutation paths by mapping DB failures to `code=db_error` with safe-fail messages.
+
+### Security
+- Bumped `pypdf` from `6.10.0` to `6.10.1` to address long runtimes caused by wrong size values in cross-reference and object streams.
+
 ## [1.5.0] - 2026-04-15
 
 ### Changed

@@ -2,8 +2,12 @@ from .database_service import DatabaseService
 from .content_database_service import ContentDatabaseService
 from .content_reader import ContentReader
 from .content_writer import ContentWriter
-from .core.query_optimizer import QueryOptimizer
-from .operations.enhanced_reader import EnhancedContentReader
+from .query_optimizer import QueryOptimizer
+from .types import (
+    DatabaseOperationCode,
+    DatabaseOperationDataKey,
+    DatabaseOperationResult,
+)
 from . import utils
 
 __all__ = [
@@ -12,6 +16,8 @@ __all__ = [
     "ContentReader",
     "ContentWriter",
     "QueryOptimizer",
-    "EnhancedContentReader",
+    "DatabaseOperationCode",
+    "DatabaseOperationDataKey",
+    "DatabaseOperationResult",
     "utils",
 ]

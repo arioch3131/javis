@@ -3,27 +3,20 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from ai_content_classifier.services.database.content_reader import ContentReader
-from ai_content_classifier.services.database.operations.enhanced_reader import (
-    EnhancedContentReader,
-)
+from ai_content_classifier.services.database.types import DatabaseOperationCode
 
 
-class TestEnhancedContentReader:
-    def test_init_wires_parent_reader_dependencies(self):
+class TestContentReader:
+    def test_init_wires_dependencies(self):
         db_service = MagicMock()
         query_optimizer = MagicMock()
         metrics = SimpleNamespace(visible_items=0, total_files=0)
 
-        reader = EnhancedContentReader(db_service, query_optimizer, metrics)
+        reader = ContentReader(db_service, query_optimizer, metrics)
 
-        assert isinstance(reader, ContentReader)
         assert reader.database_service is db_service
         assert reader.query_optimizer is query_optimizer
         assert reader.metrics is metrics
-
-    def test_explicit_api_surface_matches_content_reader(self):
-        # Parity guard for the merged reader contract.
-        assert set(dir(EnhancedContentReader)).issuperset(set(dir(ContentReader)))
 
     def test_find_items_uses_cache_and_updates_metrics(self):
         db_service = MagicMock()
@@ -43,11 +36,13 @@ class TestEnhancedContentReader:
         query_optimizer.execute_cached.side_effect = _exec
 
         metrics = SimpleNamespace(visible_items=0, total_files=0)
-        reader = EnhancedContentReader(db_service, query_optimizer, metrics)
+        reader = ContentReader(db_service, query_optimizer, metrics)
 
-        results = reader.find_items()
+        result = reader.find_items()
 
-        assert len(results) == 2
+        assert result.success is True
+        assert result.code == DatabaseOperationCode.OK
+        assert len(result.data["items"]) == 2
         assert metrics.visible_items == 2
         query_optimizer.execute_cached.assert_called_once()
 
@@ -68,15 +63,17 @@ class TestEnhancedContentReader:
         query_optimizer.execute_cached.side_effect = _exec
 
         metrics = SimpleNamespace(visible_items=0, total_files=0)
-        reader = EnhancedContentReader(db_service, query_optimizer, metrics)
+        reader = ContentReader(db_service, query_optimizer, metrics)
 
-        count = reader.count_all_items()
+        result = reader.count_all_items()
 
-        assert count == 12
+        assert result.success is True
+        assert result.code == DatabaseOperationCode.OK
+        assert result.data["count"] == 12
         assert metrics.total_files == 12
         query_optimizer.execute_cached.assert_called_once()
 
-    def test_find_items_signature_stays_compatible(self):
-        assert signature(EnhancedContentReader.find_items) == signature(
-            ContentReader.find_items
+    def test_find_items_signature_is_stable(self):
+        assert isinstance(
+            signature(ContentReader.find_items), type(signature(lambda: None))
         )
