@@ -14,7 +14,20 @@ from ai_content_classifier.services.file.types import (
     FilterType,
     ScanStatistics,
 )
+from ai_content_classifier.services.database.types import (
+    DatabaseOperationCode,
+    DatabaseOperationResult,
+)
 from ai_content_classifier.services.file.file_type_service import FileCategory
+
+
+def _db_ok(**data):
+    return DatabaseOperationResult(
+        success=True,
+        code=DatabaseOperationCode.OK,
+        message="ok",
+        data=data,
+    )
 
 
 class TestFileOperationService:
@@ -86,8 +99,10 @@ class TestFileOperationService:
     def test_refresh_file_list_success(self, service):
         valid_item = SimpleNamespace(path="/ok.jpg", directory="/ok")
         invalid_item = SimpleNamespace(path="/missing-dir")
-        service.db_service.find_items.return_value = [valid_item, invalid_item]
-        service.db_service.count_all_items.return_value = 2
+        service.db_service.find_items.return_value = _db_ok(
+            items=[valid_item, invalid_item]
+        )
+        service.db_service.count_all_items.return_value = _db_ok(count=2)
         updated = []
         service.set_callbacks(on_files_updated=updated.append)
 
@@ -134,9 +149,9 @@ class TestFileOperationService:
 
     def test_apply_filter_standard_types_query_database(self, service):
         fake_filter = MagicMock()
-        service.db_service.find_items.return_value = [
-            SimpleNamespace(path="/i.jpg", directory="/d")
-        ]
+        service.db_service.find_items.return_value = _db_ok(
+            items=[SimpleNamespace(path="/i.jpg", directory="/d")]
+        )
         with patch(
             "ai_content_classifier.services.file.operations.apply_filter_operation.ContentFilter",
             return_value=fake_filter,
@@ -155,7 +170,7 @@ class TestFileOperationService:
             def __eq__(self, _other):
                 return False
 
-        service.db_service.find_items.return_value = []
+        service.db_service.find_items.return_value = _db_ok(items=[])
         with patch.object(
             service, "_filter_files_by_type", return_value=[("/f", "/")]
         ) as helper:
@@ -173,10 +188,12 @@ class TestFileOperationService:
 
     def test_apply_filter_to_list_for_categories(self, service):
         files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.find_items.return_value = [
-            SimpleNamespace(path="/a.jpg", category="Uncategorized"),
-            SimpleNamespace(path="/b.pdf", category="Uncategorized"),
-        ]
+        service.db_service.find_items.return_value = _db_ok(
+            items=[
+                SimpleNamespace(path="/a.jpg", category="Uncategorized"),
+                SimpleNamespace(path="/b.pdf", category="Uncategorized"),
+            ]
+        )
         assert service.apply_filter_to_list(files, FilterType.ALL_FILES) == files
         assert service.apply_filter_to_list(files, FilterType.UNCATEGORIZED) == files
 
@@ -198,46 +215,50 @@ class TestFileOperationService:
     def test_apply_multi_filters_to_list(self, service):
         files = [("/a.jpg", "/"), ("/b.pdf", "/")]
         service.db_service.find_items.side_effect = [
-            [
-                SimpleNamespace(
-                    path="/a.jpg",
-                    category="Work",
-                    year_taken=2020,
-                    date_created=None,
-                    date_modified=None,
-                    date_indexed=None,
-                    content_metadata=None,
-                ),
-                SimpleNamespace(
-                    path="/b.pdf",
-                    category="Personal",
-                    year_taken=None,
-                    date_created=SimpleNamespace(year=2021),
-                    date_modified=None,
-                    date_indexed=None,
-                    content_metadata=None,
-                ),
-            ],
-            [
-                SimpleNamespace(
-                    path="/a.jpg",
-                    category="X",
-                    year_taken=2020,
-                    date_created=None,
-                    date_modified=None,
-                    date_indexed=None,
-                    content_metadata=None,
-                ),
-                SimpleNamespace(
-                    path="/b.pdf",
-                    category="Y",
-                    year_taken=None,
-                    date_created=SimpleNamespace(year=2021),
-                    date_modified=None,
-                    date_indexed=None,
-                    content_metadata=None,
-                ),
-            ],
+            _db_ok(
+                items=[
+                    SimpleNamespace(
+                        path="/a.jpg",
+                        category="Work",
+                        year_taken=2020,
+                        date_created=None,
+                        date_modified=None,
+                        date_indexed=None,
+                        content_metadata=None,
+                    ),
+                    SimpleNamespace(
+                        path="/b.pdf",
+                        category="Personal",
+                        year_taken=None,
+                        date_created=SimpleNamespace(year=2021),
+                        date_modified=None,
+                        date_indexed=None,
+                        content_metadata=None,
+                    ),
+                ]
+            ),
+            _db_ok(
+                items=[
+                    SimpleNamespace(
+                        path="/a.jpg",
+                        category="X",
+                        year_taken=2020,
+                        date_created=None,
+                        date_modified=None,
+                        date_indexed=None,
+                        content_metadata=None,
+                    ),
+                    SimpleNamespace(
+                        path="/b.pdf",
+                        category="Y",
+                        year_taken=None,
+                        date_created=SimpleNamespace(year=2021),
+                        date_modified=None,
+                        date_indexed=None,
+                        content_metadata=None,
+                    ),
+                ]
+            ),
         ]
         assert service.apply_multi_category_filter_to_list(files, ["Work"]) == [
             ("/a.jpg", "/")
@@ -265,8 +286,8 @@ class TestFileOperationService:
     def test_get_content_items_by_path_batches_large_inputs(self, service):
         files = [(f"/tmp/{idx}.txt", "/tmp") for idx in range(1205)]
         service.db_service.find_items.side_effect = [
-            [SimpleNamespace(path="/tmp/0.txt", category="A")],
-            [SimpleNamespace(path="/tmp/801.txt", category="B")],
+            _db_ok(items=[SimpleNamespace(path="/tmp/0.txt", category="A")]),
+            _db_ok(items=[SimpleNamespace(path="/tmp/801.txt", category="B")]),
         ]
 
         result = service._get_content_items_by_path(files, batch_size=800)
@@ -281,26 +302,28 @@ class TestFileOperationService:
         self, service
     ):
         files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.find_items.return_value = [
-            SimpleNamespace(
-                category="Work",
-                path="/a.jpg",
-                year_taken=None,
-                date_created=None,
-                date_modified=None,
-                date_indexed=None,
-                content_metadata={"DateTimeOriginal": "2021:05:04 12:00:00"},
-            ),
-            SimpleNamespace(
-                category="Personal",
-                path="/b.pdf",
-                year_taken=None,
-                date_created=None,
-                date_modified=None,
-                date_indexed=None,
-                content_metadata=None,
-            ),
-        ]
+        service.db_service.find_items.return_value = _db_ok(
+            items=[
+                SimpleNamespace(
+                    category="Work",
+                    path="/a.jpg",
+                    year_taken=None,
+                    date_created=None,
+                    date_modified=None,
+                    date_indexed=None,
+                    content_metadata={"DateTimeOriginal": "2021:05:04 12:00:00"},
+                ),
+                SimpleNamespace(
+                    category="Personal",
+                    path="/b.pdf",
+                    year_taken=None,
+                    date_created=None,
+                    date_modified=None,
+                    date_indexed=None,
+                    content_metadata=None,
+                ),
+            ]
+        )
 
         with patch(
             "ai_content_classifier.services.file.file_operation_service.os.path.getmtime",
@@ -312,9 +335,9 @@ class TestFileOperationService:
             ]
 
     def test_private_filters_and_utilities(self, service):
-        service.db_service.find_items.return_value = [
-            SimpleNamespace(path="/u", directory="/", category="Uncategorized")
-        ]
+        service.db_service.find_items.return_value = _db_ok(
+            items=[SimpleNamespace(path="/u", directory="/", category="Uncategorized")]
+        )
         assert service._filter_uncategorized() == [("/u", "/")]
         service.db_service.find_items.side_effect = RuntimeError("fail")
         assert service._filter_uncategorized() == []

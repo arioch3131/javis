@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from ai_content_classifier.core.logger import LoggableMixin
+from ai_content_classifier.services.database.types import DatabaseOperationCode
 
 
 @dataclass
@@ -161,7 +162,17 @@ class AutoOrganizationService(LoggableMixin):
     def _safe_get_content_item(self, file_path: str) -> Optional[Any]:
         """Safely fetches content item from database service."""
         try:
-            return self.db_service.get_content_by_path(file_path)
+            result = self.db_service.get_content_by_path(file_path)
+            if not result.success:
+                if result.code != DatabaseOperationCode.NOT_FOUND:
+                    self.logger.warning(
+                        "DB read failed for path '%s': code=%s message=%s",
+                        file_path,
+                        result.code,
+                        result.message,
+                    )
+                return None
+            return (result.data or {}).get("item")
         except Exception as e:
             self.logger.debug(f"Could not fetch content item for {file_path}: {e}")
             return None
@@ -526,7 +537,15 @@ class AutoOrganizationService(LoggableMixin):
     def _get_available_categories(self) -> List[str]:
         """Get available categories from the database."""
         try:
-            categories = self.db_service.get_unique_categories()
+            categories_result = self.db_service.get_unique_categories()
+            if not categories_result.success:
+                self.logger.warning(
+                    "Unable to load categories from DB: code=%s message=%s",
+                    categories_result.code,
+                    categories_result.message,
+                )
+                return ["Work", "Personal", "Archive", "Uncategorized"]
+            categories = (categories_result.data or {}).get("categories", [])
             if not categories:
                 categories = ["Work", "Personal", "Archive", "Uncategorized"]
             return categories

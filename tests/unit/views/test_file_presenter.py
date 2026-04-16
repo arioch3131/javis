@@ -7,7 +7,20 @@ from ai_content_classifier.services.file.types import (
     FileOperationCode,
     FileOperationResult,
 )
+from ai_content_classifier.services.database.types import (
+    DatabaseOperationCode,
+    DatabaseOperationResult,
+)
 from ai_content_classifier.views.presenters.file_presenter import FilePresenter
+
+
+def _db_ok(**data):
+    return DatabaseOperationResult(
+        success=True,
+        code=DatabaseOperationCode.OK,
+        message="ok",
+        data=data,
+    )
 
 
 class _FakeSignal:
@@ -79,7 +92,7 @@ def test_build_file_details_uses_column_confidence_with_metadata_fallback():
     content_item.tags = []
     content_item.classification_confidence = 0.82
     content_item.content_metadata = {"classification": {"confidence": 0.15}}
-    presenter.db_service.get_content_by_path.return_value = content_item
+    presenter.db_service.get_content_by_path.return_value = _db_ok(item=content_item)
 
     details = presenter._build_file_details("/tmp/red-panda.jpg")
 
@@ -98,7 +111,7 @@ def test_build_file_details_falls_back_to_metadata_confidence():
     content_item.tags = []
     content_item.classification_confidence = None
     content_item.content_metadata = {"classification": {"confidence": 0.64}}
-    presenter.db_service.get_content_by_path.return_value = content_item
+    presenter.db_service.get_content_by_path.return_value = _db_ok(item=content_item)
 
     details = presenter._build_file_details("/tmp/red-panda.jpg")
 
@@ -155,10 +168,12 @@ def test_clear_category_request_stops_when_item_not_found():
 
 def test_build_file_data_uses_batched_find_items_instead_of_n_plus_one():
     presenter = FilePresenter(MagicMock(), MagicMock())
-    presenter.db_service.find_items.return_value = [
-        MagicMock(path="/tmp/a.jpg", category="Animals", content_type="image"),
-        MagicMock(path="/tmp/b.pdf", category="Docs", content_type="document"),
-    ]
+    presenter.db_service.find_items.return_value = _db_ok(
+        items=[
+            MagicMock(path="/tmp/a.jpg", category="Animals", content_type="image"),
+            MagicMock(path="/tmp/b.pdf", category="Docs", content_type="document"),
+        ]
+    )
 
     file_data = presenter._build_file_data(
         [("/tmp/a.jpg", "/tmp"), ("/tmp/b.pdf", "/tmp")]
@@ -176,8 +191,12 @@ def test_build_file_data_batches_when_input_is_large():
     presenter = FilePresenter(MagicMock(), MagicMock())
     files = [(f"/tmp/{idx}.jpg", "/tmp") for idx in range(1205)]
     presenter.db_service.find_items.side_effect = [
-        [MagicMock(path="/tmp/0.jpg", category="A", content_type="image")],
-        [MagicMock(path="/tmp/801.jpg", category="B", content_type="image")],
+        _db_ok(
+            items=[MagicMock(path="/tmp/0.jpg", category="A", content_type="image")]
+        ),
+        _db_ok(
+            items=[MagicMock(path="/tmp/801.jpg", category="B", content_type="image")]
+        ),
     ]
 
     file_data = presenter._build_file_data(files)

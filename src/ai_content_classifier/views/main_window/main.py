@@ -11,7 +11,7 @@ from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QShowEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QTreeWidgetItem
-from ai_content_classifier.services.content_database_service import (
+from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
 from ai_content_classifier.services.theme.theme_service import get_theme_service
@@ -999,7 +999,15 @@ class MainWindow(QMainWindow, ThemeMixin):
             return duplicates_by_path
 
         try:
-            duplicate_groups = self.content_database_service.find_duplicates()
+            duplicates_result = self.content_database_service.find_duplicates()
+            if not duplicates_result.success:
+                self.logger.debug(
+                    "Could not load duplicates for columns view: code=%s message=%s",
+                    duplicates_result.code,
+                    duplicates_result.message,
+                )
+                return duplicates_by_path
+            duplicate_groups = (duplicates_result.data or {}).get("duplicates", {})
             for items in duplicate_groups.values():
                 group_paths = [getattr(item, "path", "") for item in items]
                 group_paths = [p for p in group_paths if p]

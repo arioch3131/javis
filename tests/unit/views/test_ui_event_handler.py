@@ -6,8 +6,21 @@ from ai_content_classifier.services.file.types import (
     FileOperationCode,
     FileOperationResult,
 )
+from ai_content_classifier.services.database.types import (
+    DatabaseOperationCode,
+    DatabaseOperationResult,
+)
 from ai_content_classifier.views.handlers.ui_event_handler import UIEventHandler
 from PyQt6.QtCore import Qt
+
+
+def _db_ok(**data):
+    return DatabaseOperationResult(
+        success=True,
+        code=DatabaseOperationCode.OK,
+        message="ok",
+        data=data,
+    )
 
 
 def test_build_basic_scan_config_respects_selected_file_types():
@@ -148,10 +161,9 @@ def test_handle_category_filter_request_preselects_existing_categories(monkeypat
     handler.logger = MagicMock()
     handler.main_window = MagicMock()
     handler.content_database_service = MagicMock()
-    handler.content_database_service.get_unique_categories.return_value = [
-        "Animals",
-        "Space",
-    ]
+    handler.content_database_service.get_unique_categories.return_value = _db_ok(
+        categories=["Animals", "Space"]
+    )
     handler.file_manager = MagicMock()
     handler.file_manager.get_active_filters.return_value = {"category": ["Space"]}
 
@@ -178,7 +190,9 @@ def test_handle_year_filter_request_preselects_existing_years(monkeypatch):
     handler.logger = MagicMock()
     handler.main_window = MagicMock()
     handler.content_database_service = MagicMock()
-    handler.content_database_service.get_unique_years.return_value = [2023, 2024]
+    handler.content_database_service.get_unique_years.return_value = _db_ok(
+        years=[2023, 2024]
+    )
     handler.file_manager = MagicMock()
     handler.file_manager.get_active_filters.return_value = {"year": [2024]}
 
@@ -205,10 +219,9 @@ def test_handle_extension_filter_request_preselects_existing_extensions(monkeypa
     handler.logger = MagicMock()
     handler.main_window = MagicMock()
     handler.content_database_service = MagicMock()
-    handler.content_database_service.get_unique_extensions.return_value = [
-        ".jpg",
-        ".png",
-    ]
+    handler.content_database_service.get_unique_extensions.return_value = _db_ok(
+        extensions=[".jpg", ".png"]
+    )
     handler.file_manager = MagicMock()
     handler.file_manager.get_active_filters.return_value = {"extension": [".png"]}
 

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ai_content_classifier.services.database.core.query_optimizer import QueryOptimizer
+from ai_content_classifier.services.database.query_optimizer import QueryOptimizer
 
 
 class TestQueryOptimizer:
@@ -23,7 +23,7 @@ class TestQueryOptimizer:
     @pytest.fixture
     def optimizer(self, mock_db_service, mock_runtime):
         with patch(
-            "ai_content_classifier.services.database.core.query_optimizer.get_cache_runtime",
+            "ai_content_classifier.services.database.query_optimizer.get_cache_runtime",
             return_value=mock_runtime,
         ):
             return QueryOptimizer(
@@ -48,7 +48,7 @@ class TestQueryOptimizer:
     def test_execute_cached_cache_hit_records_hit(self, mock_db_service, mock_runtime):
         metrics = SimpleNamespace(cache_hits=0, cache_misses=0)
         with patch(
-            "ai_content_classifier.services.database.core.query_optimizer.get_cache_runtime",
+            "ai_content_classifier.services.database.query_optimizer.get_cache_runtime",
             return_value=mock_runtime,
         ):
             optimizer = QueryOptimizer(
@@ -100,7 +100,7 @@ class TestQueryOptimizer:
         cache_pool.acquire_context.side_effect = RuntimeError("pool failed")
 
         with patch(
-            "ai_content_classifier.services.database.core.query_optimizer.get_cache_runtime",
+            "ai_content_classifier.services.database.query_optimizer.get_cache_runtime",
             return_value=mock_runtime,
         ):
             optimizer = QueryOptimizer(
@@ -180,7 +180,7 @@ class TestQueryOptimizer:
     ):
         metrics = SimpleNamespace()
         with patch(
-            "ai_content_classifier.services.database.core.query_optimizer.get_cache_runtime",
+            "ai_content_classifier.services.database.query_optimizer.get_cache_runtime",
             return_value=mock_runtime,
         ):
             optimizer = QueryOptimizer(

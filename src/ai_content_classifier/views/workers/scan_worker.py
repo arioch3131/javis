@@ -18,7 +18,7 @@ from ai_content_classifier.controllers.scan_controller import ScanController
 from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
 from ai_content_classifier.services.config_service import ConfigService
-from ai_content_classifier.services.content_database_service import (
+from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
 from ai_content_classifier.services.metadata.metadata_service import MetadataService

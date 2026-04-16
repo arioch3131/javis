@@ -10,6 +10,28 @@ from ai_content_classifier.services.file.types import (
     FileOperationCode,
     FileOperationResult,
 )
+from ai_content_classifier.services.database.types import (
+    DatabaseOperationCode,
+    DatabaseOperationResult,
+)
+
+
+def _db_ok(**data):
+    return DatabaseOperationResult(
+        success=True,
+        code=DatabaseOperationCode.OK,
+        message="ok",
+        data=data,
+    )
+
+
+def _db_not_found():
+    return DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.NOT_FOUND,
+        message="not found",
+        data={"item": None},
+    )
 
 
 def test_worker_is_image_file_helper():
@@ -68,9 +90,9 @@ def test_controller_file_selection_and_filters():
     ]
     db_service = MagicMock()
     db_service.get_content_by_path.side_effect = [
-        None,
-        SimpleNamespace(category="Work"),
-        None,
+        _db_not_found(),
+        _db_ok(item=SimpleNamespace(category="Work")),
+        _db_not_found(),
     ]
 
     controller = CategorizationController(
@@ -235,17 +257,19 @@ def test_worker_duplicate_cache_reuse_and_preview_break(monkeypatch):
         extraction_details="low confidence",
     )
     db_service = MagicMock()
-    db_service.find_duplicates.return_value = {
-        "hash-a": [
-            SimpleNamespace(
-                category="Work",
-                content_metadata={"classification": {"confidence": 0.77}},
-            )
-        ]
-    }
+    db_service.find_duplicates.return_value = _db_ok(
+        duplicates={
+            "hash-a": [
+                SimpleNamespace(
+                    category="Work",
+                    content_metadata={"classification": {"confidence": 0.77}},
+                )
+            ]
+        }
+    )
     db_service.get_content_by_path.side_effect = [
-        SimpleNamespace(file_hash="hash-a"),
-        None,
+        _db_ok(item=SimpleNamespace(file_hash="hash-a")),
+        _db_not_found(),
     ]
 
     worker = CategorizationWorker(
@@ -284,6 +308,56 @@ def test_worker_duplicate_cache_handles_errors():
 
     worker.content_database_service.get_content_by_path.side_effect = RuntimeError("db")
     assert worker._try_reuse_duplicate_category("/tmp/a.txt") is None
+
+
+def test_worker_duplicate_cache_handles_db_result_failure():
+    worker = CategorizationWorker(
+        llm_service=MagicMock(),
+        content_database_service=MagicMock(),
+        file_paths=[],
+        categories=["Work"],
+        config={"save_results": False},
+    )
+    worker.content_database_service.find_duplicates.return_value = (
+        DatabaseOperationResult(
+            success=False,
+            code=DatabaseOperationCode.DB_ERROR,
+            message="db error",
+            data={"error": "db"},
+        )
+    )
+    logs = []
+    worker.log_message.connect(lambda message: logs.append(message))
+    worker._build_hash_category_cache()
+    assert logs
+
+
+def test_filter_files_by_config_tolerates_non_not_found_db_read_failure():
+    controller = CategorizationController(
+        llm_controller=MagicMock(),
+        settings_manager=MagicMock(),
+        file_manager=MagicMock(),
+        content_database_service=MagicMock(),
+    )
+    controller.content_database_service.get_content_by_path.return_value = (
+        DatabaseOperationResult(
+            success=False,
+            code=DatabaseOperationCode.DB_ERROR,
+            message="db read error",
+            data={"error": "db"},
+        )
+    )
+
+    out = controller._filter_files_by_config(
+        ["/tmp/a.jpg"],
+        {
+            "process_images": True,
+            "process_documents": True,
+            "only_uncategorized": True,
+        },
+    )
+
+    assert out == ["/tmp/a.jpg"]
 
 
 def test_controller_start_automatic_categorization_paths():

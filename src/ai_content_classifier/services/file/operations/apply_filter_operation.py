@@ -85,8 +85,30 @@ class ApplyFilterOperation:
                 else:
                     content_filter = ContentFilter()
                     content_filter.by_type(content_type)
-                    filtered_content = self.db_service.find_items(
+                    filtered_content_result = self.db_service.find_items(
                         content_filter=content_filter
+                    )
+                    if not filtered_content_result.success:
+                        self.logger.warning(
+                            "DB read failed while applying '%s' filter: code=%s message=%s",
+                            filter_type.value,
+                            filtered_content_result.code,
+                            filtered_content_result.message,
+                        )
+                        return FileOperationResult(
+                            success=False,
+                            code=FileOperationCode.UNKNOWN_ERROR,
+                            message=filtered_content_result.message
+                            or "Unable to retrieve filtered items from database.",
+                            data={
+                                FileOperationDataKey.ERROR.value: (
+                                    filtered_content_result.data or {}
+                                ).get("error", filtered_content_result.message),
+                                FileOperationDataKey.FILTERED_FILES.value: current_files.copy(),
+                            },
+                        )
+                    filtered_content = (filtered_content_result.data or {}).get(
+                        "items", []
                     )
                     filtered_files = [
                         (item.path, item.directory) for item in filtered_content

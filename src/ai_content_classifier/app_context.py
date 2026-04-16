@@ -16,7 +16,7 @@ from ai_content_classifier.repositories.config_repository import ConfigRepositor
 from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
-from ai_content_classifier.services.database.core.query_optimizer import QueryOptimizer
+from ai_content_classifier.services.database.query_optimizer import QueryOptimizer
 from ai_content_classifier.services.database.database_service import DatabaseService
 from ai_content_classifier.services.i18n.i18n_service import get_i18n_service
 from ai_content_classifier.services.llm.llm_service import LLMService

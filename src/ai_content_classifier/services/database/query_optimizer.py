@@ -1,4 +1,3 @@
-# core/query_optimizer.py
 """Query optimizer with optional omni-cache integration."""
 
 import hashlib
@@ -6,11 +5,12 @@ from threading import RLock
 from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
+
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
 
 
 class QueryOptimizer:
-    """Optimize queries with smart cache"""
+    """Optimize queries with smart cache."""
 
     def __init__(
         self,
@@ -21,7 +21,7 @@ class QueryOptimizer:
     ):
         self.database_service = database_service
         self.cache = cache_pool
-        self.metrics = metrics  # PerformanceMetrics
+        self.metrics = metrics
         self.cache_ttl_seconds = cache_ttl_seconds
         self._cache_runtime = get_cache_runtime()
         self._cache_keys: set[str] = set()
@@ -33,14 +33,10 @@ class QueryOptimizer:
         cache_key: Optional[str] = None,
         session: Optional[Session] = None,
     ) -> Any:
-        """
-        Execute query with automatic caching.
-        """
-        # If an external session is provided, bypass cache.
+        """Execute query with automatic caching."""
         if session is not None:
             return self._execute_query(query_builder, session)
 
-        # Generate key when not provided
         if not cache_key:
             cache_key = self._generate_cache_key(query_builder)
 
@@ -71,41 +67,34 @@ class QueryOptimizer:
             self._cache_runtime.delete(key, adapter="memory")
 
     def _execute_query(self, query_builder: Callable, session: Optional[Session]):
-        """Execute query"""
+        """Execute query."""
         external_session = session is not None
         session = session or self.database_service.Session()
 
         try:
             query = query_builder(session)
-
-            # If this is a SQLAlchemy Query object.
             if hasattr(query, "all"):
                 return query.all()
-            # If it is already a result
             return query
         except Exception:
             if not external_session:
                 try:
                     session.rollback()
                 except Exception:
-                    # Preserve original query exception if rollback fails.
                     pass
             raise
-
         finally:
             if not external_session:
                 session.close()
 
     def _generate_cache_key(self, query_builder: Callable) -> str:
-        """Generate unique query key"""
+        """Generate unique query key."""
         import inspect
 
-        # Use function source code when available.
         try:
             source = inspect.getsource(query_builder)
             key_data = f"query_{hashlib.md5(source.encode()).hexdigest()}"
         except (OSError, TypeError):
-            # Fallback when source cannot be retrieved.
             key_data = f"query_{id(query_builder)}"
 
         return key_data

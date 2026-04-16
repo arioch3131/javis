@@ -1,14 +1,10 @@
-"""
-This module provides the ContentWriter class, which is responsible for all write
-operations on the content database.
-"""
+"""Write operations for content database with a unified mutation contract."""
 
 import os
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -26,6 +22,16 @@ from ai_content_classifier.repositories.content_repository import (
 )
 from ai_content_classifier.services.database import utils
 from ai_content_classifier.services.database.database_service import DatabaseService
+from ai_content_classifier.services.database.types import DatabaseOperationResult
+from ai_content_classifier.services.database.write_operations import (
+    ClearAllContentOperation,
+    ClearContentCategoryOperation,
+    CreateContentItemOperation,
+    DeleteContentByPathsOperation,
+    SaveItemBatchOperation,
+    UpdateContentCategoryOperation,
+    UpdateMetadataBatchOperation,
+)
 
 
 class ContentWriter(LoggableMixin):
@@ -38,6 +44,14 @@ class ContentWriter(LoggableMixin):
         self.database_service = database_service
         self.repos = repos
 
+        self._create_content_item_operation = CreateContentItemOperation()
+        self._save_item_batch_operation = SaveItemBatchOperation()
+        self._update_metadata_batch_operation = UpdateMetadataBatchOperation()
+        self._update_content_category_operation = UpdateContentCategoryOperation()
+        self._clear_content_category_operation = ClearContentCategoryOperation()
+        self._clear_all_content_operation = ClearAllContentOperation()
+        self._delete_content_by_paths_operation = DeleteContentByPathsOperation()
+
     def create_content_item(
         self,
         path: str,
@@ -46,167 +60,42 @@ class ContentWriter(LoggableMixin):
         metadata: Optional[Dict[str, Any]] = None,
         refresh: bool = True,
         session: Optional[Session] = None,
-    ) -> ContentItem:
-        self._validate_content_creation_params(path, content_type)
-
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
-        try:
-            existing_item = (
-                session.query(ContentItem).filter(ContentItem.path == path).first()
-            )
-            if isinstance(existing_item, ContentItem):
-                self._update_existing_item(
-                    existing_item=existing_item,
-                    path=path,
-                    extract_basic_info=extract_basic_info,
-                    metadata=metadata,
-                )
-                if external_session:
-                    session.flush()
-                else:
-                    session.commit()
-
-                if refresh:
-                    session.refresh(existing_item)
-
-                return existing_item
-
-            file_info = self._extract_file_info(path, extract_basic_info)
-
-            item = self._create_typed_content_item(
-                path=path,
-                content_type=content_type,
-                file_info=file_info,
-                file_hash=self._compute_hash_if_exists(path)
-                if extract_basic_info
-                else None,
-                metadata=metadata,
-            )
-            self.logger.debug(
-                f"DEBUG: create_content_item - Item created with content_type: {content_type}"
-            )
-
-            session.add(item)
-
-            if external_session:
-                session.flush()
-            else:
-                session.commit()
-
-            if refresh:
-                session.refresh(item)
-
-            self.logger.debug(f"Created content item: {path} (type: {content_type}).")
-            return item
-
-        except SQLAlchemyError as e:
-            if not external_session:
-                session.rollback()
-            self.logger.error(f"Error creating content item for {path}: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
+    ) -> DatabaseOperationResult:
+        return self._create_content_item_operation.execute(
+            self,
+            path=path,
+            content_type=content_type,
+            extract_basic_info=extract_basic_info,
+            metadata=metadata,
+            refresh=refresh,
+            session=session,
+        )
 
     def save_item_batch(
         self,
         items: List[Dict[str, Any]],
         refresh: bool = True,
         session: Optional[Session] = None,
-    ) -> List[ContentItem]:
-        if not items:
-            return []
-
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
-        try:
-            content_items = []
-
-            for item_data in items:
-                if not self._is_valid_item_data(item_data):
-                    self.logger.warning(
-                        f"Skipping invalid item data in batch: {item_data}"
-                    )
-                    continue
-
-                existing_item = (
-                    session.query(ContentItem)
-                    .filter(ContentItem.path == item_data["path"])
-                    .first()
-                )
-                if isinstance(existing_item, ContentItem):
-                    self._update_existing_item(
-                        existing_item=existing_item,
-                        path=item_data["path"],
-                        extract_basic_info=True,
-                        metadata=item_data.get("metadata"),
-                    )
-                    content_items.append(existing_item)
-                    continue
-
-                item = self._create_content_item_from_data(item_data)
-                if item:
-                    session.add(item)
-                    content_items.append(item)
-
-            if external_session:
-                session.flush()
-            else:
-                session.commit()
-
-            if refresh:
-                for item in content_items:
-                    session.refresh(item)
-
-            self.logger.info(f"Successfully saved batch of {len(content_items)} items.")
-            return content_items
-
-        except SQLAlchemyError as e:
-            if not external_session:
-                session.rollback()
-            self.logger.error(f"Error saving batch of content items: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
+    ) -> DatabaseOperationResult:
+        return self._save_item_batch_operation.execute(
+            self,
+            items=items,
+            refresh=refresh,
+            session=session,
+        )
 
     def update_metadata_batch(
         self,
         metadata_updates: List[Tuple[int, Dict[str, Any]]],
         refresh: bool = False,
         session: Optional[Session] = None,
-    ) -> int:
-        if not metadata_updates:
-            return 0
-
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
-        try:
-            updated_items = self._process_metadata_updates(session, metadata_updates)
-
-            if not external_session:
-                session.commit()
-
-            if refresh:
-                for item in updated_items:
-                    session.refresh(item)
-
-            updated_count = len(updated_items)
-            self.logger.info(f"Updated metadata for {updated_count} items in batch.")
-            return updated_count
-
-        except SQLAlchemyError as e:
-            if not external_session:
-                session.rollback()
-            self.logger.error(f"Error updating metadata batch: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
+    ) -> DatabaseOperationResult:
+        return self._update_metadata_batch_operation.execute(
+            self,
+            metadata_updates=metadata_updates,
+            refresh=refresh,
+            session=session,
+        )
 
     def update_content_category(
         self,
@@ -216,96 +105,39 @@ class ContentWriter(LoggableMixin):
         extraction_method: str,
         extraction_details: str,
         session: Optional[Session] = None,
-    ) -> Optional[ContentItem]:
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
-        try:
-            item = (
-                session.query(ContentItem).filter(ContentItem.path == file_path).first()
-            )
-
-            if item:
-                item.category = category
-                item.classification_confidence = confidence
-
-                if item.content_metadata is None:
-                    item.content_metadata = {}
-
-                item.content_metadata["classification"] = {
-                    "category": category,
-                    "confidence": confidence,
-                    "extraction_method": extraction_method,
-                    "extraction_details": extraction_details,
-                    "timestamp": datetime_utcnow().isoformat(),
-                }
-
-                flag_modified(item, "content_metadata")
-
-                item.date_modified = datetime_utcnow()
-
-                if not external_session:
-                    session.commit()
-
-                self.logger.debug(f"Updated category for {file_path} to '{category}'.")
-                return item
-            else:
-                self.logger.warning(
-                    f"Content item not found for path: {file_path}. Cannot update category."
-                )
-                return None
-
-        except SQLAlchemyError as e:
-            if not external_session:
-                session.rollback()
-            self.logger.error(f"Error updating category for {file_path}: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
+    ) -> DatabaseOperationResult:
+        return self._update_content_category_operation.execute(
+            self,
+            file_path=file_path,
+            category=category,
+            confidence=confidence,
+            extraction_method=extraction_method,
+            extraction_details=extraction_details,
+            session=session,
+        )
 
     def clear_content_category(
         self, file_path: str, session: Optional[Session] = None
-    ) -> Optional[ContentItem]:
-        external_session = session is not None
-        session = session or self.database_service.Session()
+    ) -> DatabaseOperationResult:
+        return self._clear_content_category_operation.execute(
+            self,
+            file_path=file_path,
+            session=session,
+        )
 
-        try:
-            item = (
-                session.query(ContentItem).filter(ContentItem.path == file_path).first()
-            )
+    def clear_all_content(
+        self, session: Optional[Session] = None
+    ) -> DatabaseOperationResult:
+        return self._clear_all_content_operation.execute(self, session=session)
 
-            if item:
-                item.category = None
-                item.classification_confidence = None
-
-                if item.content_metadata is None:
-                    item.content_metadata = {}
-                if isinstance(item.content_metadata, dict):
-                    item.content_metadata.pop("classification", None)
-                    flag_modified(item, "content_metadata")
-
-                item.date_modified = datetime_utcnow()
-
-                if not external_session:
-                    session.commit()
-
-                self.logger.debug(f"Cleared category for {file_path}.")
-                return item
-
-            self.logger.warning(
-                f"Content item not found for path: {file_path}. Cannot clear category."
-            )
-            return None
-
-        except SQLAlchemyError as e:
-            if not external_session:
-                session.rollback()
-            self.logger.error(f"Error clearing category for {file_path}: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
+    def delete_content_by_paths(
+        self, file_paths: List[str], session: Optional[Session] = None
+    ) -> DatabaseOperationResult:
+        return self._delete_content_by_paths_operation.execute(
+            self,
+            file_paths=file_paths,
+            session=session,
+        )
 
     def _validate_content_creation_params(self, path: str, content_type: str) -> None:
         if not path:
@@ -402,14 +234,14 @@ class ContentWriter(LoggableMixin):
                     height=item_data.get("height"),
                     format=item_data.get("format"),
                 )
-            elif content_type == "document":
+            if content_type == "document":
                 return Document(
                     **common_args,
                     language=item_data.get("language"),
                     page_count=item_data.get("page_count"),
                     text_content=item_data.get("text_content"),
                 )
-            elif content_type == "video":
+            if content_type == "video":
                 return Video(
                     **common_args,
                     duration=item_data.get("duration"),
@@ -417,7 +249,7 @@ class ContentWriter(LoggableMixin):
                     height=item_data.get("height"),
                     format=item_data.get("format"),
                 )
-            elif content_type == "audio":
+            if content_type == "audio":
                 return Audio(
                     **common_args,
                     duration=item_data.get("duration"),
@@ -425,8 +257,7 @@ class ContentWriter(LoggableMixin):
                     sample_rate=item_data.get("sample_rate"),
                     format=item_data.get("format"),
                 )
-            else:
-                return ContentItem(**common_args)
+            return ContentItem(**common_args)
 
         except Exception as e:
             self.logger.error(f"Error creating content item from data dictionary: {e}")
@@ -444,31 +275,33 @@ class ContentWriter(LoggableMixin):
 
     def _process_metadata_updates(
         self, session: Session, metadata_updates: List[Tuple[int, Dict[str, Any]]]
-    ) -> List[ContentItem]:
-        updated_items = []
+    ) -> Tuple[List[ContentItem], List[int]]:
+        updated_items: List[ContentItem] = []
+        failed_ids: List[int] = []
 
         for item_id, metadata in metadata_updates:
             item = session.query(ContentItem).filter(ContentItem.id == item_id).first()
 
-            if item:
-                if item.content_metadata is None:
-                    item.content_metadata = {}
+            if not item:
+                failed_ids.append(item_id)
+                continue
 
-                serialized_metadata = utils.serialize_metadata_for_json(metadata)
+            if item.content_metadata is None:
+                item.content_metadata = {}
 
-                item.content_metadata.update(serialized_metadata) or {}
+            serialized_metadata = utils.serialize_metadata_for_json(metadata)
 
-                flag_modified(item, "content_metadata")
+            item.content_metadata.update(serialized_metadata) or {}
 
-                item.year_taken = self._resolve_year_taken(
-                    item.path, serialized_metadata
-                )
-                item.metadata_extracted = True
-                item.date_modified = datetime_utcnow()
+            flag_modified(item, "content_metadata")
 
-                updated_items.append(item)
+            item.year_taken = self._resolve_year_taken(item.path, serialized_metadata)
+            item.metadata_extracted = True
+            item.date_modified = datetime_utcnow()
 
-        return updated_items
+            updated_items.append(item)
+
+        return updated_items, failed_ids
 
     def _update_existing_item(
         self,

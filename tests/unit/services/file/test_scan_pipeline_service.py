@@ -4,6 +4,28 @@ from unittest.mock import MagicMock
 from ai_content_classifier.services.file.scan_pipeline_service import (
     ScanPipelineService,
 )
+from ai_content_classifier.services.database.types import (
+    DatabaseOperationCode,
+    DatabaseOperationResult,
+)
+
+
+def _db_ok(**data):
+    return DatabaseOperationResult(
+        success=True,
+        code=DatabaseOperationCode.OK,
+        message="ok",
+        data=data,
+    )
+
+
+def _db_not_found():
+    return DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.NOT_FOUND,
+        message="not found",
+        data={"item": None},
+    )
 
 
 def _build_service():
@@ -53,8 +75,8 @@ def test_run_pipeline_processes_files_and_emits_callbacks():
         yield "/tmp/b.pdf", "/tmp"
 
     scanner.scan_directory.side_effect = scan_directory
-    db.get_content_by_path.return_value = None
-    db.create_content_item.return_value = MagicMock()
+    db.get_content_by_path.return_value = _db_not_found()
+    db.create_content_item.return_value = _db_ok(item=MagicMock())
     metadata_service.get_all_metadata.return_value = {"k": "v"}
     thumbnail_service.create_thumbnail.return_value = SimpleNamespace(success=True)
 
@@ -81,7 +103,7 @@ def test_cancel_requests_scanner_cancellation():
 
 def test_process_single_file_existing_item_short_circuit():
     service, _, db, metadata_service, thumbnail_service = _build_service()
-    db.get_content_by_path.return_value = MagicMock()
+    db.get_content_by_path.return_value = _db_ok(item=MagicMock())
 
     result = service._process_single_file("/tmp/existing.jpg", "/tmp")
 
@@ -95,7 +117,7 @@ def test_process_single_file_existing_item_short_circuit():
 
 def test_process_single_file_error_path_sets_error():
     service, _, db, metadata_service, thumbnail_service = _build_service()
-    db.get_content_by_path.return_value = None
+    db.get_content_by_path.return_value = _db_not_found()
     metadata_service.get_all_metadata.return_value = {"error": "bad metadata"}
     thumbnail_service.create_thumbnail.return_value = SimpleNamespace(success=False)
     db.create_content_item.side_effect = RuntimeError("insert failed")

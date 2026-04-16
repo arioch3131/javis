@@ -1,7 +1,4 @@
-"""
-This module provides the ContentReader class, which is responsible for all read-only
-operations on the content database.
-"""
+"""Read operations for content database."""
 
 import datetime
 import hashlib
@@ -18,6 +15,23 @@ from ai_content_classifier.core.logger import LoggableMixin
 from ai_content_classifier.models.content_models import ContentItem
 from ai_content_classifier.repositories.content_repository import ContentFilter
 from ai_content_classifier.services.database.database_service import DatabaseService
+from ai_content_classifier.services.database.read_operations import (
+    CountAllItemsOperation,
+    FindDuplicatesOperation,
+    FindItemsOperation,
+    GetContentByPathOperation,
+    GetItemsPendingMetadataOperation,
+    GetStatisticsOperation,
+    GetUncategorizedItemsOperation,
+    GetUniqueCategoriesOperation,
+    GetUniqueExtensionsOperation,
+    GetUniqueYearsOperation,
+)
+from ai_content_classifier.services.database.types import (
+    DatabaseOperationCode,
+    DatabaseOperationDataKey,
+    DatabaseOperationResult,
+)
 
 
 class ContentReader(LoggableMixin):
@@ -34,6 +48,17 @@ class ContentReader(LoggableMixin):
         self.query_optimizer = query_optimizer
         self.metrics = metrics
 
+        self._find_items_operation = FindItemsOperation()
+        self._count_all_items_operation = CountAllItemsOperation()
+        self._get_items_pending_metadata_operation = GetItemsPendingMetadataOperation()
+        self._find_duplicates_operation = FindDuplicatesOperation()
+        self._get_statistics_operation = GetStatisticsOperation()
+        self._get_content_by_path_operation = GetContentByPathOperation()
+        self._get_uncategorized_items_operation = GetUncategorizedItemsOperation()
+        self._get_unique_categories_operation = GetUniqueCategoriesOperation()
+        self._get_unique_years_operation = GetUniqueYearsOperation()
+        self._get_unique_extensions_operation = GetUniqueExtensionsOperation()
+
     def find_items(
         self,
         content_filter: Optional[ContentFilter] = None,
@@ -44,9 +69,10 @@ class ContentReader(LoggableMixin):
         eager_load: bool = False,
         custom_filter: Optional[List[Any]] = None,
         session: Optional[Session] = None,
-    ) -> List[ContentItem]:
-        if session is not None or self.query_optimizer is None:
-            results = self._find_items_uncached(
+    ) -> DatabaseOperationResult:
+        try:
+            items = self._find_items_operation.execute(
+                self,
                 content_filter=content_filter,
                 sort_by=sort_by,
                 sort_desc=sort_desc,
@@ -56,35 +82,12 @@ class ContentReader(LoggableMixin):
                 custom_filter=custom_filter,
                 session=session,
             )
-        else:
-            cache_key = self._build_cache_key(
-                "find_items",
-                getattr(content_filter, "criteria", None) if content_filter else None,
-                sort_by,
-                sort_desc,
-                limit,
-                offset,
-                eager_load,
-                custom_filter,
+            return self._success_result(
+                message=f"{len(items)} item(s) found.",
+                data={"items": items},
             )
-
-            results = self.query_optimizer.execute_cached(
-                lambda cached_session: self._find_items_uncached(
-                    content_filter=content_filter,
-                    sort_by=sort_by,
-                    sort_desc=sort_desc,
-                    limit=limit,
-                    offset=offset,
-                    eager_load=eager_load,
-                    custom_filter=custom_filter,
-                    session=cached_session,
-                ),
-                cache_key=cache_key,
-            )
-
-        if self.metrics is not None and hasattr(self.metrics, "visible_items"):
-            self.metrics.visible_items = len(results)
-        return results
+        except Exception as exc:
+            return self._error_result("Error finding items.", exc)
 
     def _find_items_uncached(
         self,
@@ -143,18 +146,19 @@ class ContentReader(LoggableMixin):
             if not external_session:
                 session.close()
 
-    def count_all_items(self, session: Optional[Session] = None) -> int:
-        if session is None and self.query_optimizer is not None:
-            count = self.query_optimizer.execute_cached(
-                lambda cached_session: self._count_all_items_uncached(cached_session),
-                cache_key="count_all_items",
+    def count_all_items(
+        self, session: Optional[Session] = None
+    ) -> DatabaseOperationResult:
+        try:
+            count = self._count_all_items_operation.execute(self, session=session)
+            return self._success_result(
+                message=f"Total items: {count}.",
+                data={"count": count},
             )
-        else:
-            count = self._count_all_items_uncached(session)
-
-        if self.metrics is not None and hasattr(self.metrics, "total_files"):
-            self.metrics.total_files = count
-        return count
+        except Exception as exc:
+            return self._error_result(
+                "Error counting items.", exc, default_data={"count": 0}
+            )
 
     def _count_all_items_uncached(self, session: Optional[Session] = None) -> int:
         external_session = session is not None
@@ -177,163 +181,84 @@ class ContentReader(LoggableMixin):
         limit: Optional[int] = None,
         eager_load: bool = False,
         session: Optional[Session] = None,
-    ) -> List[ContentItem]:
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
+    ) -> DatabaseOperationResult:
         try:
-            query = session.query(ContentItem).filter(
-                not ContentItem.metadata_extracted
+            items = self._get_items_pending_metadata_operation.execute(
+                self,
+                content_type=content_type,
+                limit=limit,
+                eager_load=eager_load,
+                session=session,
             )
-
-            if content_type:
-                query = query.filter(ContentItem.content_type == content_type)
-
-            query = self._configure_loading_options(query, eager_load)
-
-            if limit is not None:
-                query = query.limit(limit)
-
-            results = list(query.all())
-            self.logger.debug(
-                f"Found {len(results)} items pending metadata extraction."
+            return self._success_result(
+                message=f"{len(items)} item(s) pending metadata extraction.",
+                data={"items": items},
             )
-            return results
-
-        except Exception as e:
-            self.logger.error(f"Error retrieving pending metadata items: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
+        except Exception as exc:
+            return self._error_result("Error retrieving pending metadata items.", exc)
 
     def find_duplicates(
         self, session: Optional[Session] = None
-    ) -> Dict[str, List[ContentItem]]:
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
+    ) -> DatabaseOperationResult:
         try:
-            duplicate_hashes = (
-                session.query(ContentItem.file_hash)
-                .filter(ContentItem.file_hash.isnot(None))
-                .group_by(ContentItem.file_hash)
-                .having(func.count(ContentItem.id) > 1)
-                .all()
+            duplicates = self._find_duplicates_operation.execute(self, session=session)
+            return self._success_result(
+                message=f"{len(duplicates)} duplicate group(s) found.",
+                data={"duplicates": duplicates},
             )
+        except Exception as exc:
+            return self._error_result("Error finding duplicate items.", exc)
 
-            if not duplicate_hashes:
-                return {}
-
-            hash_values = [h[0] for h in duplicate_hashes]
-            duplicates = (
-                session.query(ContentItem)
-                .filter(ContentItem.file_hash.in_(hash_values))
-                .all()
-            )
-
-            result = {}
-            for item in duplicates:
-                if item.file_hash not in result:
-                    result[item.file_hash] = []
-                result[item.file_hash].append(item)
-
-            self.logger.debug(f"Found {len(result)} sets of duplicate files.")
-            return result
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Error finding duplicate content items: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
-
-    def get_statistics(self, session: Optional[Session] = None) -> Dict[str, Any]:
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
+    def get_statistics(
+        self, session: Optional[Session] = None
+    ) -> DatabaseOperationResult:
         try:
-            total_items = session.query(func.count(ContentItem.id)).scalar()
-
-            type_counts = (
-                session.query(ContentItem.content_type, func.count(ContentItem.id))
-                .group_by(ContentItem.content_type)
-                .all()
+            statistics = self._get_statistics_operation.execute(self, session=session)
+            return self._success_result(
+                message="Statistics generated.",
+                data={"statistics": statistics},
             )
-
-            extracted_count = (
-                session.query(func.count(ContentItem.id))
-                .filter(ContentItem.metadata_extracted)
-                .scalar()
-            )
-
-            stats = {
-                "total_items": total_items,
-                "items_by_type": dict(type_counts),
-                "metadata_extracted": extracted_count,
-                "metadata_pending": total_items - extracted_count,
-            }
-
-            self.logger.debug(f"Generated database statistics: {stats}")
-            return stats
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Error generating database statistics: {e}")
-            raise
-        finally:
-            if not external_session:
-                session.close()
+        except Exception as exc:
+            return self._error_result("Error generating statistics.", exc)
 
     def get_content_by_path(
         self, file_path: str, session: Optional[Session] = None
-    ) -> Optional[ContentItem]:
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
+    ) -> DatabaseOperationResult:
         try:
-            item = (
-                session.query(ContentItem)
-                .options(joinedload(ContentItem.tags))
-                .filter(ContentItem.path == file_path)
-                .first()
+            item = self._get_content_by_path_operation.execute(
+                self,
+                file_path=file_path,
+                session=session,
             )
-
-            if item and not external_session:
-                # If the session is not external, detach the object after loading tags
-                session.expunge(item)
-
-            return item
-
-        except Exception as e:
-            self.logger.error(f"Error retrieving content by path {file_path}: {e}")
-            return None
-        finally:
-            if not external_session:
-                session.close()
+            if item is None:
+                return DatabaseOperationResult(
+                    success=False,
+                    code=DatabaseOperationCode.NOT_FOUND,
+                    message=f"No content item found for path: {file_path}",
+                    data={"item": None},
+                )
+            return self._success_result(
+                message="Content item found.",
+                data={"item": item},
+            )
+        except Exception as exc:
+            return self._error_result("Error retrieving content item by path.", exc)
 
     def get_uncategorized_items(
         self, content_type: Optional[str] = None, session: Optional[Session] = None
-    ) -> List[ContentItem]:
-        external_session = session is not None
-        session = session or self.database_service.Session()
-
+    ) -> DatabaseOperationResult:
         try:
-            query = session.query(ContentItem).filter(ContentItem.category.is_(None))
-
-            if content_type:
-                query = query.filter(ContentItem.content_type == content_type)
-
-            results = list(query.all())
-            self.logger.debug(f"Found {len(results)} uncategorized items.")
-            return results
-        except SQLAlchemyError as e:
-            self.logger.error(
-                f"Error retrieving uncategorized items: {e}", exc_info=True
+            items = self._get_uncategorized_items_operation.execute(
+                self,
+                content_type=content_type,
+                session=session,
             )
-            return []
-        finally:
-            if not external_session:
-                session.close()
+            return self._success_result(
+                message=f"{len(items)} uncategorized item(s) found.",
+                data={"items": items},
+            )
+        except Exception as exc:
+            return self._error_result("Error retrieving uncategorized items.", exc)
 
     def _build_find_query(
         self,
@@ -405,15 +330,19 @@ class ContentReader(LoggableMixin):
 
         return query
 
-    def get_unique_categories(self, session: Optional[Session] = None) -> List[str]:
-        if session is None and self.query_optimizer is not None:
-            return self.query_optimizer.execute_cached(
-                lambda cached_session: self._get_unique_categories_uncached(
-                    cached_session
-                ),
-                cache_key="unique_categories",
+    def get_unique_categories(
+        self, session: Optional[Session] = None
+    ) -> DatabaseOperationResult:
+        try:
+            categories = self._get_unique_categories_operation.execute(
+                self, session=session
             )
-        return self._get_unique_categories_uncached(session)
+            return self._success_result(
+                message=f"{len(categories)} unique category(ies) found.",
+                data={"categories": categories},
+            )
+        except Exception as exc:
+            return self._error_result("Error retrieving unique categories.", exc)
 
     def _get_unique_categories_uncached(
         self, session: Optional[Session] = None
@@ -436,13 +365,17 @@ class ContentReader(LoggableMixin):
             if not external_session:
                 session.close()
 
-    def get_unique_years(self, session: Optional[Session] = None) -> List[int]:
-        if session is None and self.query_optimizer is not None:
-            return self.query_optimizer.execute_cached(
-                lambda cached_session: self._get_unique_years_uncached(cached_session),
-                cache_key="unique_years",
+    def get_unique_years(
+        self, session: Optional[Session] = None
+    ) -> DatabaseOperationResult:
+        try:
+            years = self._get_unique_years_operation.execute(self, session=session)
+            return self._success_result(
+                message=f"{len(years)} unique year(s) found.",
+                data={"years": years},
             )
-        return self._get_unique_years_uncached(session)
+        except Exception as exc:
+            return self._error_result("Error retrieving unique years.", exc)
 
     def _get_unique_years_uncached(
         self, session: Optional[Session] = None
@@ -450,7 +383,6 @@ class ContentReader(LoggableMixin):
         external_session = session is not None
         session = session or self.database_service.Session()
         try:
-            # Build years from all relevant sources, not only date_created.
             items = session.query(
                 ContentItem.path,
                 ContentItem.year_taken,
@@ -462,8 +394,6 @@ class ContentReader(LoggableMixin):
 
             years: set[int] = set()
             for row in items:
-                # Backward-compatible row parsing for tests/mocks that may return
-                # legacy 1-column tuples.
                 if isinstance(row, (tuple, list)):
                     if len(row) == 6:
                         (
@@ -500,7 +430,6 @@ class ContentReader(LoggableMixin):
                     date_indexed = None
                     metadata = None
 
-                # 1) Dedicated image field
                 if isinstance(year_taken, int) and 1900 <= year_taken <= 2100:
                     years.add(year_taken)
                 elif year_taken is not None:
@@ -508,14 +437,12 @@ class ContentReader(LoggableMixin):
                     if parsed is not None:
                         years.add(parsed)
 
-                # 2) SQL date fields
                 for dt in (date_created, date_modified, date_indexed):
                     if hasattr(dt, "year"):
                         y = int(dt.year)
                         if 1900 <= y <= 2100:
                             years.add(y)
 
-                # 3) Flexible metadata dates (EXIF and extractor-specific keys)
                 if isinstance(metadata, dict):
                     for key in (
                         "year",
@@ -533,7 +460,6 @@ class ContentReader(LoggableMixin):
                         if extracted_year is not None:
                             years.add(extracted_year)
 
-                # 4) Filesystem fallback (align with columns Date display)
                 if item_path:
                     try:
                         mtime_year = datetime.datetime.fromtimestamp(
@@ -557,7 +483,6 @@ class ContentReader(LoggableMixin):
         if raw_value is None:
             return None
 
-        # Direct integer case.
         if isinstance(raw_value, int):
             return raw_value if 1900 <= raw_value <= 2100 else None
 
@@ -565,7 +490,6 @@ class ContentReader(LoggableMixin):
         if not text:
             return None
 
-        # Common date strings: keep first valid 4-digit year.
         match = re.search(r"(19\d{2}|20\d{2}|2100)", text)
         if not match:
             return None
@@ -573,15 +497,19 @@ class ContentReader(LoggableMixin):
         year = int(match.group(1))
         return year if 1900 <= year <= 2100 else None
 
-    def get_unique_extensions(self, session: Optional[Session] = None) -> List[str]:
-        if session is None and self.query_optimizer is not None:
-            return self.query_optimizer.execute_cached(
-                lambda cached_session: self._get_unique_extensions_uncached(
-                    cached_session
-                ),
-                cache_key="unique_extensions",
+    def get_unique_extensions(
+        self, session: Optional[Session] = None
+    ) -> DatabaseOperationResult:
+        try:
+            extensions = self._get_unique_extensions_operation.execute(
+                self, session=session
             )
-        return self._get_unique_extensions_uncached(session)
+            return self._success_result(
+                message=f"{len(extensions)} unique extension(s) found.",
+                data={"extensions": extensions},
+            )
+        except Exception as exc:
+            return self._error_result("Error retrieving unique extensions.", exc)
 
     def _get_unique_extensions_uncached(
         self, session: Optional[Session] = None
@@ -589,8 +517,6 @@ class ContentReader(LoggableMixin):
         external_session = session is not None
         session = session or self.database_service.Session()
         try:
-            # Build extensions from basename and keep only last suffix part.
-            # Example: "archive.tar.gz" -> "gz"
             path_rows = (
                 session.query(ContentItem.path)
                 .filter(ContentItem.path.isnot(None))
@@ -615,3 +541,29 @@ class ContentReader(LoggableMixin):
     def _build_cache_key(self, *args: Any) -> str:
         key_data = json.dumps(args, default=str, sort_keys=True)
         return hashlib.md5(key_data.encode()).hexdigest()
+
+    def _success_result(
+        self, message: str, data: Dict[str, Any]
+    ) -> DatabaseOperationResult:
+        return DatabaseOperationResult(
+            success=True,
+            code=DatabaseOperationCode.OK,
+            message=message,
+            data=data,
+        )
+
+    def _error_result(
+        self,
+        message: str,
+        error: Exception,
+        default_data: Optional[Dict[str, Any]] = None,
+    ) -> DatabaseOperationResult:
+        return DatabaseOperationResult(
+            success=False,
+            code=DatabaseOperationCode.DB_ERROR,
+            message=message,
+            data={
+                **(default_data or {}),
+                DatabaseOperationDataKey.ERROR.value: str(error),
+            },
+        )

@@ -13,9 +13,10 @@ from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QObject, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox
-from ai_content_classifier.services.content_database_service import (
+from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
+from ai_content_classifier.services.database.types import DatabaseOperationCode
 from ai_content_classifier.services.file.file_type_service import is_image_file
 from ai_content_classifier.services.file.types import FileOperationCode
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
@@ -550,10 +551,10 @@ class FilePresenter(QObject):
             return
 
         try:
-            updated_item = self.db_service.clear_content_category(normalized_path)
-            if not updated_item:
+            clear_result = self.db_service.clear_content_category(normalized_path)
+            if not clear_result.success:
                 self.logger.warning(
-                    f"Unable to clear category: file not found in DB ({normalized_path})"
+                    f"Unable to clear category in DB ({normalized_path}): {clear_result.message}"
                 )
                 return
 
@@ -642,7 +643,17 @@ class FilePresenter(QObject):
     def _build_file_details(self, file_path: str) -> Dict[str, Any]:
         metadata = self.get_or_create_metadata(file_path)
 
-        content_item = self.db_service.get_content_by_path(file_path)
+        content_item_result = self.db_service.get_content_by_path(file_path)
+        if not content_item_result.success and (
+            content_item_result.code != DatabaseOperationCode.NOT_FOUND
+        ):
+            self.logger.warning(
+                "Unable to load file details from DB for '%s': code=%s message=%s",
+                file_path,
+                content_item_result.code,
+                content_item_result.message,
+            )
+        content_item = (content_item_result.data or {}).get("item")
         content_type = content_item.content_type if content_item else "unknown"
         classification_metadata = (
             getattr(content_item, "content_metadata", {}) or {} if content_item else {}
@@ -850,10 +861,20 @@ def _build_file_data_batched(
             return None
 
         batch_paths = unique_paths[index : index + batch_size]
-        batch_items = db_service.find_items(
+        batch_result = db_service.find_items(
             custom_filter=[ContentItem.path.in_(batch_paths)],
             eager_load=False,
         )
+        if not batch_result.success:
+            logger = getattr(db_service, "logger", None)
+            if logger is not None:
+                logger.warning(
+                    "Batch DB read failed in _build_file_data_batched: code=%s message=%s",
+                    batch_result.code,
+                    batch_result.message,
+                )
+            continue
+        batch_items = (batch_result.data or {}).get("items", [])
         for item in batch_items:
             if hasattr(item, "path"):
                 content_by_path[item.path] = item
