@@ -5,7 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.0] - 2026-04-18
+## [1.8.0] - 2026-04-18
+
+### Added
+- Added a unified contract for auto-organization under `services/auto_organization_service.py`:
+  - `AutoOrganizationOperationResult`
+  - `AutoOrganizationOperationCode`
+  - canonical `data` keys (`source_path`, `target_path`, `action`, `error`) with V1.8 extensions (`size_bytes`, `file_hash`)
+- Added a dedicated DB path update API for move workflows:
+  - `ContentWriter.update_content_path(...)`
+  - `ContentDatabaseService.update_content_path(...)`
+- Added V1.8 documentation for the service contract in `docs/ORGANIZATION_SERVICE_V1.fr.md`, including explicit V1.9 dependency notes.
+
+### Changed
+- Refactored `AutoOrganizationService` to return the unified contract on file organization operations.
+- Refactored `AutoOrganizationService` into a dedicated package layout:
+  - `services/auto_organization/types.py`
+  - `services/auto_organization/operations/`
+  - `services/auto_organization/service.py`
+- Updated organization controller/worker flow to consume unified operation results.
+- Structured organization logs around `code`, `source_path`, `target_path`, `action`.
+- Move path update now preserves stored `file_hash` without forced recomputation.
+
+### Fixed
+- Explicitly maps move-DB inconsistencies to standardized auto-organization codes (`database_error` / `conflict_error`) instead of generic failures.
+
+## [1.7.0] - 2026-04-17
 
 ### Added
 - Added a dedicated extensible filtering architecture under `services/filtering/`:

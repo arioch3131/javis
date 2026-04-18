@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "v*"
+      - "latest"
 
 jobs:
   build-windows-exe:
@@ -50,7 +50,7 @@ jobs:
           retention-days: 14
 
       - name: Publish GitHub Release asset
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.ref == 'refs/tags/latest'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}

@@ -1,13 +1,19 @@
 from datetime import datetime
+from dataclasses import asdict
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from ai_content_classifier.services.auto_organization_service import (
+from ai_content_classifier.services.auto_organization import (
+    AutoOrganizationDataKey,
+    AutoOrganizationOperationCode,
     AutoOrganizationService,
     OrganizationConfig,
-    OrganizationResult,
+)
+from ai_content_classifier.services.auto_organization.operations.helpers import (
+    resolve_name_conflict,
+    sanitize_dirname,
 )
 from ai_content_classifier.services.database.types import (
     DatabaseOperationCode,
@@ -137,7 +143,7 @@ def test_prepare_target_structure_handles_exception(service, tmp_path, monkeypat
         organization_structure="By Type",
     )
     monkeypatch.setattr(
-        "ai_content_classifier.services.auto_organization_service.os.makedirs",
+        "ai_content_classifier.services.auto_organization.service.os.makedirs",
         lambda *_a, **_k: (_ for _ in ()).throw(OSError("mkdir fail")),
     )
 
@@ -167,11 +173,14 @@ def test_organize_single_file_by_category_copy_handles_name_conflict(
     result = service.organize_single_file(str(source), config)
 
     assert result.success is True
-    assert result.action == "copy"
-    assert result.target_path.endswith("report_1.txt")
+    assert result.code == AutoOrganizationOperationCode.OK
+    assert result.data[AutoOrganizationDataKey.ACTION.value] == "copy"
+    assert result.data[AutoOrganizationDataKey.TARGET_PATH.value].endswith(
+        "report_1.txt"
+    )
     assert source.exists()
     assert (category_dir / "report_1.txt").exists()
-    assert result.size_bytes == 5
+    assert result.data[AutoOrganizationDataKey.SIZE_BYTES.value] == 5
 
 
 def test_organize_single_file_by_year_uses_creation_date_year(
@@ -192,7 +201,7 @@ def test_organize_single_file_by_year_uses_creation_date_year(
     result = service.organize_single_file(str(source), config)
 
     assert result.success is True
-    assert "/2021/" in result.target_path
+    assert "/2021/" in result.data[AutoOrganizationDataKey.TARGET_PATH.value]
     assert source.exists()
 
 
@@ -212,8 +221,8 @@ def test_organize_single_file_by_type_category_move(service, db_service, tmp_pat
     result = service.organize_single_file(str(source), config)
 
     assert result.success is True
-    assert result.action == "move"
-    assert "/Images/Travel/" in result.target_path
+    assert result.data[AutoOrganizationDataKey.ACTION.value] == "move"
+    assert "/Images/Travel/" in result.data[AutoOrganizationDataKey.TARGET_PATH.value]
     assert source.exists() is False
 
 
@@ -223,7 +232,10 @@ def test_perform_file_action_returns_error_when_source_missing(service, tmp_path
     result = service._perform_file_action("/missing/file.txt", str(target), "copy")
 
     assert result.success is False
-    assert result.error_message == "Source file does not exist"
+    assert result.code == AutoOrganizationOperationCode.VALIDATION_ERROR
+    assert (
+        result.data[AutoOrganizationDataKey.ERROR.value] == "Source file does not exist"
+    )
 
 
 def test_organize_single_file_handles_missing_structure(service, tmp_path):
@@ -233,7 +245,7 @@ def test_organize_single_file_handles_missing_structure(service, tmp_path):
     )
     result = service.organize_single_file("/tmp/a.txt", config)
     assert result.success is False
-    assert result.error_message
+    assert result.code == AutoOrganizationOperationCode.UNKNOWN_ERROR
 
 
 @pytest.mark.parametrize(
@@ -292,7 +304,7 @@ def test_internal_extractors_and_helpers_cover_fallbacks(
     assert service._extract_year("/tmp/missing", dict_item) == 2020
 
     monkeypatch.setattr(
-        "ai_content_classifier.services.auto_organization_service.os.path.getmtime",
+        "ai_content_classifier.services.auto_organization.service.os.path.getmtime",
         lambda _p: (_ for _ in ()).throw(OSError("mtime fail")),
     )
     assert isinstance(service._extract_year("/tmp/missing", None), int)
@@ -303,8 +315,8 @@ def test_internal_extractors_and_helpers_cover_fallbacks(
     assert "Personal" in service._get_available_categories()
 
     long_name = "A" * 120
-    assert len(service._sanitize_dirname(long_name)) == 100
-    assert service._sanitize_dirname("CON") == "CON_folder"
+    assert len(sanitize_dirname(long_name)) == 100
+    assert sanitize_dirname("CON") == "CON_folder"
 
 
 def test_safe_get_content_item_handles_non_not_found_db_failure(service, db_service):
@@ -340,13 +352,13 @@ def test_organize_custom_and_resolve_name_conflicts(service, db_service, tmp_pat
         organization_structure="Custom",
         organization_action="copy",
     )
-    result = service._organize_custom(str(source), config)
+    result = service.organize_single_file(str(source), config)
     assert result.success is True
 
     conflict = tmp_path / "name.txt"
     conflict.write_text("1", encoding="utf-8")
     (tmp_path / "name_1.txt").write_text("2", encoding="utf-8")
-    resolved = service._resolve_name_conflict(str(conflict))
+    resolved = resolve_name_conflict(str(conflict))
     assert resolved.endswith("name_2.txt")
 
 
@@ -361,7 +373,7 @@ def test_preview_year_and_statistics_error_paths(service, tmp_path, monkeypatch)
     assert preview["file_count"] == 1
 
     monkeypatch.setattr(
-        "ai_content_classifier.services.auto_organization_service.datetime",
+        "ai_content_classifier.services.auto_organization.operations.generate_preview_operation.datetime",
         SimpleNamespace(
             fromtimestamp=lambda *_a, **_k: (_ for _ in ()).throw(ValueError("bad")),
             now=datetime.now,
@@ -385,10 +397,27 @@ def test_calculate_statistics_returns_aggregates(service, tmp_path):
     src_other = str(tmp_path / "data.xyz")
 
     results = [
-        OrganizationResult(True, src_doc, "/x/doc.pdf", "copy", size_bytes=100),
-        OrganizationResult(True, src_img, "/x/img.png", "move", size_bytes=200),
-        OrganizationResult(
-            False, src_other, "/x/data.xyz", "copy", error_message="fail"
+        service._organize_single_file_operation._success_result(
+            message="ok",
+            source_path=src_doc,
+            target_path="/x/doc.pdf",
+            action="copy",
+            size_bytes=100,
+        ),
+        service._organize_single_file_operation._success_result(
+            message="ok",
+            source_path=src_img,
+            target_path="/x/img.png",
+            action="move",
+            size_bytes=200,
+        ),
+        service._organize_single_file_operation._error_result(
+            code=AutoOrganizationOperationCode.UNKNOWN_ERROR,
+            message="fail",
+            source_path=src_other,
+            target_path="/x/data.xyz",
+            action="copy",
+            error="fail",
         ),
     ]
     config = OrganizationConfig(
@@ -406,3 +435,77 @@ def test_calculate_statistics_returns_aggregates(service, tmp_path):
     assert stats["moved"] == 1
     assert stats["by_type"]["Documents"] == 1
     assert stats["by_type"]["Images"] == 1
+
+
+def test_unified_contract_has_canonical_data_keys(service, db_service, tmp_path):
+    source = tmp_path / "photo.jpg"
+    source.write_bytes(b"img")
+    db_service.get_content_by_path.return_value = _db_ok(
+        item=SimpleNamespace(category="Travel", file_hash="abc123")
+    )
+
+    config = OrganizationConfig(
+        target_directory=str(tmp_path / "target"),
+        organization_structure="By Type/Category",
+        organization_action="copy",
+    )
+    result = service.organize_single_file(str(source), config)
+
+    assert result.success is True
+    assert result.code == AutoOrganizationOperationCode.OK
+    assert set(
+        [
+            AutoOrganizationDataKey.SOURCE_PATH.value,
+            AutoOrganizationDataKey.TARGET_PATH.value,
+            AutoOrganizationDataKey.ACTION.value,
+            AutoOrganizationDataKey.ERROR.value,
+        ]
+    ).issubset(set(result.data.keys()))
+    assert result.data[AutoOrganizationDataKey.FILE_HASH.value] == "abc123"
+    serialized = asdict(result)
+    assert serialized["code"] == AutoOrganizationOperationCode.OK
+
+
+def test_move_maps_db_update_failure_to_database_error(service, db_service, tmp_path):
+    source = tmp_path / "a.txt"
+    source.write_text("abc", encoding="utf-8")
+    (tmp_path / "target").mkdir(parents=True, exist_ok=True)
+    db_service.get_content_by_path.return_value = _db_ok(
+        item=SimpleNamespace(category="Work", file_hash="hash-1")
+    )
+    db_service.update_content_path.return_value = DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.DB_ERROR,
+        message="db fail",
+        data={"error": "db fail"},
+    )
+
+    result = service._perform_file_action(
+        str(source), str(tmp_path / "target" / "a.txt"), "move"
+    )
+
+    assert result.success is False
+    assert result.code == AutoOrganizationOperationCode.DATABASE_ERROR
+    assert result.data[AutoOrganizationDataKey.ERROR.value] == "db fail"
+
+
+def test_move_maps_target_conflict_to_conflict_error(service, db_service, tmp_path):
+    source = tmp_path / "a.txt"
+    source.write_text("abc", encoding="utf-8")
+    (tmp_path / "target").mkdir(parents=True, exist_ok=True)
+    db_service.get_content_by_path.return_value = _db_ok(
+        item=SimpleNamespace(file_hash="hash-1")
+    )
+    db_service.update_content_path.return_value = DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.INVALID_INPUT,
+        message="Target path already exists in DB",
+        data={"error": "target_path_exists"},
+    )
+
+    result = service._perform_file_action(
+        str(source), str(tmp_path / "target" / "a.txt"), "move"
+    )
+
+    assert result.success is False
+    assert result.code == AutoOrganizationOperationCode.CONFLICT_ERROR

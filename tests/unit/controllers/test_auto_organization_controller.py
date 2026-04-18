@@ -3,16 +3,40 @@ from unittest.mock import MagicMock
 from ai_content_classifier.controllers.auto_organization_controller import (
     AutoOrganizationController,
     OrganizationConfig,
-    OrganizationResult,
     OrganizationWorker,
+)
+from ai_content_classifier.services.auto_organization import (
+    AutoOrganizationDataKey,
+    AutoOrganizationOperationCode,
+    AutoOrganizationOperationResult,
 )
 
 
 def test_worker_collects_results_and_reports_progress():
     service = MagicMock()
     service.organize_single_file.side_effect = [
-        OrganizationResult(True, "/a", "/t/a", "copy"),
-        OrganizationResult(False, "/b", "", "copy", error_message="err"),
+        AutoOrganizationOperationResult(
+            success=True,
+            code=AutoOrganizationOperationCode.OK,
+            message="ok",
+            data={
+                AutoOrganizationDataKey.SOURCE_PATH.value: "/a",
+                AutoOrganizationDataKey.TARGET_PATH.value: "/t/a",
+                AutoOrganizationDataKey.ACTION.value: "copy",
+                AutoOrganizationDataKey.ERROR.value: None,
+            },
+        ),
+        AutoOrganizationOperationResult(
+            success=False,
+            code=AutoOrganizationOperationCode.FILESYSTEM_ERROR,
+            message="err",
+            data={
+                AutoOrganizationDataKey.SOURCE_PATH.value: "/b",
+                AutoOrganizationDataKey.TARGET_PATH.value: "",
+                AutoOrganizationDataKey.ACTION.value: "copy",
+                AutoOrganizationDataKey.ERROR.value: "err",
+            },
+        ),
     ]
     config = OrganizationConfig("/target", "By Category", "copy")
     worker = OrganizationWorker(service, ["/a", "/b"], config)
@@ -103,7 +127,19 @@ def test_completion_and_cancel_cleanup_paths():
     completed = []
     controller.organization_completed.connect(lambda payload: completed.append(payload))
     controller._on_organization_completed(
-        [OrganizationResult(True, "/a", "/b", "copy")]
+        [
+            AutoOrganizationOperationResult(
+                success=True,
+                code=AutoOrganizationOperationCode.OK,
+                message="ok",
+                data={
+                    AutoOrganizationDataKey.SOURCE_PATH.value: "/a",
+                    AutoOrganizationDataKey.TARGET_PATH.value: "/b",
+                    AutoOrganizationDataKey.ACTION.value: "copy",
+                    AutoOrganizationDataKey.ERROR.value: None,
+                },
+            )
+        ]
     )
 
     assert len(completed) == 1
@@ -172,7 +208,19 @@ def test_completed_organization_exposes_open_folder_action():
     }
 
     controller._on_organization_completed(
-        [OrganizationResult(True, "/a", "/tmp/t/a", "copy")]
+        [
+            AutoOrganizationOperationResult(
+                success=True,
+                code=AutoOrganizationOperationCode.OK,
+                message="ok",
+                data={
+                    AutoOrganizationDataKey.SOURCE_PATH.value: "/a",
+                    AutoOrganizationDataKey.TARGET_PATH.value: "/tmp/t/a",
+                    AutoOrganizationDataKey.ACTION.value: "copy",
+                    AutoOrganizationDataKey.ERROR.value: None,
+                },
+            )
+        ]
     )
 
     payload = controller.main_window.show_operation_state.call_args.args[0]

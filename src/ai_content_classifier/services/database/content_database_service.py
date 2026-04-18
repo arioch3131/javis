@@ -223,3 +223,17 @@ class ContentDatabaseService(LoggableMixin):
         result = self.writer.delete_content_by_paths(file_paths, session)
         self._invalidate_on_success(result)
         return result
+
+    def update_content_path(
+        self,
+        source_path: str,
+        target_path: str,
+        session: Optional[Session] = None,
+    ) -> DatabaseOperationResult:
+        result = self.writer.update_content_path(
+            source_path=source_path,
+            target_path=target_path,
+            session=session,
+        )
+        self._invalidate_on_success(result)
+        return result
