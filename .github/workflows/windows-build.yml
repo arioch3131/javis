@@ -1,11 +1,12 @@
 name: Windows Build
 
-permissions:
-  contents: write
-
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
   push:
+    branches:
+      - main
     tags:
       - "latest"
 
@@ -41,21 +42,22 @@ jobs:
         run: |
           Compress-Archive -Path dist/Javis/* -DestinationPath dist/Javis-windows.zip -Force
 
+      - name: Resolve artifact metadata
+        id: artifact_meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "name=Javis-windows-${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "retention=7" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=Javis-windows-rolling" >> "$GITHUB_OUTPUT"
+            echo "retention=90" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Javis-windows-exe
+          name: ${{ steps.artifact_meta.outputs.name }}
           path: dist/Javis-windows.zip
           if-no-files-found: error
-          retention-days: 14
-
-      - name: Publish GitHub Release asset
-        if: github.ref == 'refs/tags/latest'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            dist/Javis-windows.zip
+          retention-days: ${{ steps.artifact_meta.outputs.retention }}
