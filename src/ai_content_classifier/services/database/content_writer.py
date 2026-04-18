@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -23,6 +24,7 @@ from ai_content_classifier.repositories.content_repository import (
 from ai_content_classifier.services.database import utils
 from ai_content_classifier.services.database.database_service import DatabaseService
 from ai_content_classifier.services.database.types import DatabaseOperationResult
+from ai_content_classifier.services.database.types import DatabaseOperationCode
 from ai_content_classifier.services.database.write_operations import (
     ClearAllContentOperation,
     ClearContentCategoryOperation,
@@ -138,6 +140,116 @@ class ContentWriter(LoggableMixin):
             file_paths=file_paths,
             session=session,
         )
+
+    def update_content_path(
+        self,
+        source_path: str,
+        target_path: str,
+        session: Optional[Session] = None,
+    ) -> DatabaseOperationResult:
+        """Update a content path without recomputing or mutating ``file_hash``."""
+        if not source_path or not target_path:
+            return DatabaseOperationResult(
+                success=False,
+                code=DatabaseOperationCode.INVALID_INPUT,
+                message="source_path and target_path are required",
+                data={"error": "source_path and target_path are required"},
+            )
+        if source_path == target_path:
+            return DatabaseOperationResult(
+                success=True,
+                code=DatabaseOperationCode.OK,
+                message="Path unchanged; no update required",
+                data={
+                    "updated": False,
+                    "source_path": source_path,
+                    "target_path": target_path,
+                },
+            )
+
+        owns_session = session is None
+        db_session = session or self.database_service.Session()
+        try:
+            item = (
+                db_session.query(ContentItem)
+                .filter(ContentItem.path == source_path)
+                .first()
+            )
+            if not item:
+                return DatabaseOperationResult(
+                    success=False,
+                    code=DatabaseOperationCode.NOT_FOUND,
+                    message=f"No content item found for path: {source_path}",
+                    data={"error": "content_not_found", "source_path": source_path},
+                )
+
+            existing_target = (
+                db_session.query(ContentItem)
+                .filter(ContentItem.path == target_path)
+                .first()
+            )
+            if existing_target:
+                return DatabaseOperationResult(
+                    success=False,
+                    code=DatabaseOperationCode.INVALID_INPUT,
+                    message=f"Target path already exists in DB: {target_path}",
+                    data={
+                        "error": "target_path_exists",
+                        "source_path": source_path,
+                        "target_path": target_path,
+                    },
+                )
+
+            item.path = target_path
+            item.filename = os.path.basename(target_path)
+            item.directory = os.path.dirname(target_path)
+            item.date_modified = datetime_utcnow()
+
+            if owns_session:
+                db_session.commit()
+
+            return DatabaseOperationResult(
+                success=True,
+                code=DatabaseOperationCode.OK,
+                message="Content path updated",
+                data={
+                    "updated": True,
+                    "source_path": source_path,
+                    "target_path": target_path,
+                    "file_hash": item.file_hash,
+                },
+            )
+        except SQLAlchemyError as exc:
+            if owns_session:
+                db_session.rollback()
+            self.logger.error(f"Error updating content path in DB: {exc}")
+            return DatabaseOperationResult(
+                success=False,
+                code=DatabaseOperationCode.DB_ERROR,
+                message=f"Database error while updating path: {exc}",
+                data={
+                    "error": str(exc),
+                    "source_path": source_path,
+                    "target_path": target_path,
+                },
+            )
+        except Exception as exc:
+            if owns_session:
+                db_session.rollback()
+            self.logger.error(f"Unexpected error updating content path: {exc}")
+            return DatabaseOperationResult(
+                success=False,
+                code=DatabaseOperationCode.UNKNOWN_ERROR,
+                message=f"Unexpected error while updating path: {exc}",
+                data={
+                    "error": str(exc),
+                    "source_path": source_path,
+                    "target_path": target_path,
+                },
+            )
+        finally:
+            if owns_session:
+                db_session.close()
 
     def _validate_content_creation_params(self, path: str, content_type: str) -> None:
         if not path:

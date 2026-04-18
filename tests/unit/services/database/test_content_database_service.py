@@ -195,3 +195,19 @@ class TestContentDatabaseService:
 
         assert result.code == DatabaseOperationCode.OK
         assert result.data["deleted_count"] == 2
+
+    def test_update_content_path_delegates_and_invalidates_cache(self):
+        self.mock_writer.update_content_path.return_value = self._ok_result(
+            updated=True, source_path="/a", target_path="/b", file_hash="hash"
+        )
+
+        result = self.service.update_content_path("/a", "/b")
+
+        assert result.success is True
+        assert result.data["updated"] is True
+        self.mock_writer.update_content_path.assert_called_once_with(
+            source_path="/a",
+            target_path="/b",
+            session=None,
+        )
+        self.mock_query_optimizer.invalidate_all.assert_called_once()

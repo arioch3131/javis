@@ -261,3 +261,58 @@ class TestContentWriter:
             metadata={"year": 2022},
         )
         assert existing.metadata_extracted is True
+
+    def test_update_content_path_success_without_hash_mutation(
+        self, content_writer, mock_database_service
+    ):
+        _, session = mock_database_service
+        item = ContentItem(
+            path="/tmp/a.jpg",
+            filename="a.jpg",
+            directory="/tmp",
+            content_type="image",
+            file_hash="stable-hash",
+        )
+        session.query.return_value.filter.return_value.first.side_effect = [item, None]
+
+        result = content_writer.update_content_path("/tmp/a.jpg", "/tmp/new/a.jpg")
+
+        assert result.success is True
+        assert result.code == DatabaseOperationCode.OK
+        assert item.path == "/tmp/new/a.jpg"
+        assert item.filename == "a.jpg"
+        assert item.directory == "/tmp/new"
+        assert item.file_hash == "stable-hash"
+        assert result.data.get("file_hash") == "stable-hash"
+
+    def test_update_content_path_conflict_and_not_found(
+        self, content_writer, mock_database_service
+    ):
+        _, session = mock_database_service
+        existing_target = ContentItem(
+            path="/tmp/new/a.jpg",
+            filename="a.jpg",
+            directory="/tmp/new",
+            content_type="image",
+        )
+        source_item = ContentItem(
+            path="/tmp/a.jpg",
+            filename="a.jpg",
+            directory="/tmp",
+            content_type="image",
+        )
+
+        session.query.return_value.filter.return_value.first.side_effect = [
+            source_item,
+            existing_target,
+        ]
+        conflict = content_writer.update_content_path("/tmp/a.jpg", "/tmp/new/a.jpg")
+        assert conflict.success is False
+        assert conflict.code == DatabaseOperationCode.INVALID_INPUT
+
+        session.query.return_value.filter.return_value.first.side_effect = [None]
+        not_found = content_writer.update_content_path(
+            "/tmp/missing.jpg", "/tmp/new.jpg"
+        )
+        assert not_found.success is False
+        assert not_found.code == DatabaseOperationCode.NOT_FOUND

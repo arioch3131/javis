@@ -9,10 +9,12 @@ from typing import Dict, List, Tuple
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 
 from ai_content_classifier.core.logger import get_logger
-from ai_content_classifier.services.auto_organization_service import (
+from ai_content_classifier.services.auto_organization import (
+    AutoOrganizationDataKey,
+    AutoOrganizationOperationCode,
+    AutoOrganizationOperationResult,
     AutoOrganizationService,
     OrganizationConfig,
-    OrganizationResult,
 )
 from ai_content_classifier.views.widgets.common.operation_state import (
     OperationDetail,
@@ -27,7 +29,7 @@ class OrganizationWorker(QThread):
     # Signaux
     progress_updated = pyqtSignal(int, int)  # (processed, total)
     file_organized = pyqtSignal(str, str, str)  # (source, target, action)
-    organization_completed = pyqtSignal(list)  # List of results
+    organization_completed = pyqtSignal(list)  # List of unified operation results
     organization_error = pyqtSignal(str)  # Erreur
 
     def __init__(
@@ -62,8 +64,19 @@ class OrganizationWorker(QThread):
                     results.append(result)
 
                     if result.success:
+                        payload = result.data or {}
                         self.file_organized.emit(
-                            result.source_path, result.target_path, result.action
+                            str(
+                                payload.get(
+                                    AutoOrganizationDataKey.SOURCE_PATH.value, ""
+                                )
+                            ),
+                            str(
+                                payload.get(
+                                    AutoOrganizationDataKey.TARGET_PATH.value, ""
+                                )
+                            ),
+                            str(payload.get(AutoOrganizationDataKey.ACTION.value, "")),
                         )
 
                     # Émettre progression
@@ -71,12 +84,16 @@ class OrganizationWorker(QThread):
 
                 except Exception as e:
                     # Create an error result
-                    error_result = OrganizationResult(
+                    error_result = AutoOrganizationOperationResult(
                         success=False,
-                        source_path=file_path,
-                        target_path="",
-                        action=self.config.organization_action,
-                        error_message=str(e),
+                        code=AutoOrganizationOperationCode.UNKNOWN_ERROR,
+                        message=f"Unexpected worker error: {e}",
+                        data={
+                            AutoOrganizationDataKey.SOURCE_PATH.value: file_path,
+                            AutoOrganizationDataKey.TARGET_PATH.value: "",
+                            AutoOrganizationDataKey.ACTION.value: self.config.organization_action,
+                            AutoOrganizationDataKey.ERROR.value: str(e),
+                        },
                     )
                     results.append(error_result)
 
@@ -288,7 +305,9 @@ class AutoOrganizationController(QObject):
         """Return list of supported organization structures."""
         return list(self.service.structure_handlers.keys())
 
-    def _on_organization_completed(self, results: List[OrganizationResult]):
+    def _on_organization_completed(
+        self, results: List[AutoOrganizationOperationResult]
+    ):
         """Gestionnaire pour la fin de l'organisation."""
         try:
             # Get configuration from worker
