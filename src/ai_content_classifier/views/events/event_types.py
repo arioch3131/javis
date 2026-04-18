@@ -17,6 +17,7 @@ class EventType(str, Enum):
     SCAN_ERROR = "scan_error"
     FILES_UPDATED = "files_updated"
     FILTER_APPLIED = "filter_applied"
+    FILTER_ERROR = "filter_error"
     CATEGORIZATION_STARTED = "categorization_started"
     CATEGORIZATION_COMPLETED = "categorization_completed"
     CATEGORIZATION_ERROR = "categorization_error"

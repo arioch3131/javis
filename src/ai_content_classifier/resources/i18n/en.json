@@ -100,5 +100,25 @@
       "changed_title": "Language updated",
       "changed_message": "Language preference saved. Main menus were refreshed. Some dialogs may need to be reopened."
     }
+  },
+  "filter": {
+    "error": {
+      "validation": {
+        "status": "Filter not applied: invalid filter value",
+        "log": "⚠️ Filter validation error: {reason}"
+      },
+      "unknown_filter": {
+        "status": "Filter not applied: unsupported filter",
+        "log": "⚠️ Unknown filter type: {reason}"
+      },
+      "database": {
+        "status": "Filter not applied: database unavailable",
+        "log": "❌ Database error while applying filters: {reason}"
+      },
+      "unknown": {
+        "status": "Filter not applied: unexpected error",
+        "log": "❌ Unexpected filter error: {reason}"
+      }
+    }
   }
 }

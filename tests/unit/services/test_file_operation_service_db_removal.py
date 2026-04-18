@@ -64,3 +64,25 @@ def test_remove_files_from_database_ignores_empty_input():
     assert result.success is True
     assert result.data[FileOperationDataKey.DELETED_COUNT.value] == 0
     service.db_service.delete_content_by_paths.assert_not_called()
+
+
+def test_remove_files_from_database_failure_is_propagated():
+    db_service = MagicMock()
+    db_service.delete_content_by_paths.return_value = DatabaseOperationResult(
+        success=False,
+        code=DatabaseOperationCode.UNKNOWN_ERROR,
+        message="delete failed",
+        data={},
+    )
+    service = FileOperationService(
+        db_service=db_service,
+        config_service=MagicMock(),
+        metadata_service=MagicMock(),
+        thumbnail_service=MagicMock(),
+    )
+    service.logger = MagicMock()
+
+    result = service.remove_files_from_database(["/tmp/a.png"])
+
+    assert result.success is False
+    service.logger.error.assert_called_once()

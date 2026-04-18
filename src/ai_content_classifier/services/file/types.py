@@ -43,6 +43,9 @@ class FileOperationCode(str, Enum):
     FILE_NOT_FOUND = "file_not_found"
     NO_DEFAULT_APP = "no_default_app"
     ACCESS_DENIED = "access_denied"
+    VALIDATION_ERROR = "validation_error"
+    UNKNOWN_FILTER = "unknown_filter"
+    DATABASE_ERROR = "database_error"
     UNKNOWN_ERROR = "unknown_error"
 
 

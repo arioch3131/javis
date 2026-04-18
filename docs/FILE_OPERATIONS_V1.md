@@ -2,6 +2,8 @@
 
 This document describes the file operations architecture and the unified return contract based on `FileOperationResult`.
 
+Note (V1.7): filtering is now handled by `services/filtering/ContentFilterService` (plugin architecture), not by `FileOperationService`.
+
 ## 1. Goal
 
 - avoid a monolithic `FileOperationService`;
@@ -27,6 +29,9 @@ Current codes (`FileOperationCode`):
 - `file_not_found`
 - `no_default_app`
 - `access_denied`
+- `validation_error`
+- `unknown_filter`
+- `database_error`
 - `unknown_error`
 
 ## 3. Canonical `data` Keys
@@ -51,25 +56,14 @@ Operations are implemented in `src/ai_content_classifier/services/file/operation
 | `open_file` | `OpenFileOperation` | Open a file using the OS default app | success: `path`; failure: `path`, `error`; OS command failure: `path`, `command`, `return_code`, `stdout`, `stderr` |
 | `remove_from_database` | `RemoveFilesFromDatabaseOperation` | Remove DB entries only | success: `deleted_count`, `normalized_paths`; failure: `error` |
 | `refresh_file_list` | `RefreshFileListOperation` | Reload file list from DB | success: `file_list`, `content_by_path`; failure: `file_list`, `content_by_path`, `error` |
-| `apply_filter` | `ApplyFilterOperation` | Apply a type filter | success: `filtered_files`; failure: `filtered_files`, `error` |
 | `process_scan_results` | `ProcessScanResultsOperation` | Normalize scan output + stats | success: `file_list`, `content_by_path`, `files_found`; failure: `file_list`, `error` |
 | `process_file_result` | `ProcessFileResultOperation` | Update file processing stats | success: `file_processing_result`; failure: `error` |
 
-### 4.1 Special Case: Special `FilterType` Values
+### 4.1 Filtering Scope (V1.7)
 
-The following `FilterType` values do not go through `ApplyFilterOperation`:
-
-- `MULTI_CATEGORY`
-- `MULTI_YEAR`
-- `MULTI_EXTENSION`
-
-They are handled through dedicated service methods (`FileOperationService`):
-
-- `apply_multi_category_filter_to_list(...)`
-- `apply_multi_year_filter_to_list(...)`
-- `apply_multi_extension_filter_to_list(...)`
-
-Their result is then integrated into `FileManager`'s cumulative flow (`_apply_cumulative_filters`).
+Filtering (`file_type`, `category`, `year`, `extension`) is handled by `ContentFilterService.apply_filters(...)` and emitted by `FileManager`.
+Filtering failures are mapped to dedicated `FileOperationCode` values:
+`validation_error`, `unknown_filter`, and `database_error`.
 
 ## 5. Layer Responsibilities
 
@@ -97,7 +91,6 @@ Callbacks configured through `set_callbacks(...)`:
 - `on_scan_error(error_message: str)`
 - `on_file_processed(result: FileProcessingResult)`
 - `on_files_updated(file_list: list[tuple[str, str]])`
-- `on_filter_applied(filter_type: FilterType, filtered_files: list[tuple[str, str]])`
 - `on_stats_updated(stats: ScanStatistics)`
 
 ## 6. Exact Mapping (Who Uses What)
@@ -118,7 +111,6 @@ Callbacks configured through `set_callbacks(...)`:
 
 | `FileManager` method | Called `FileOperationService` method |
 | --- | --- |
-| `apply_filter(...)` | `apply_filter(...)` |
 | `_apply_cumulative_filters()` | `refresh_file_list()` |
 | `refresh_file_list()` | `refresh_file_list()` |
 | `refresh_and_emit_visible_files()` | `refresh_file_list()` |
@@ -133,7 +125,6 @@ Callbacks configured through `set_callbacks(...)`:
 | `open_file(...)` | `OpenFileOperation.execute(...)` |
 | `remove_files_from_database(...)` | `RemoveFilesFromDatabaseOperation.execute(...)` |
 | `refresh_file_list()` | `RefreshFileListOperation.execute(...)` |
-| `apply_filter(...)` | `ApplyFilterOperation.execute(...)` |
 | `process_scan_results(...)` | `ProcessScanResultsOperation.execute(...)` |
 | `process_file_result(...)` | `ProcessFileResultOperation.execute(...)` |
 
@@ -163,15 +154,12 @@ flowchart LR
     S --> O1[OpenFileOperation]
     S --> O2[RemoveFilesFromDatabaseOperation]
     S --> O3[RefreshFileListOperation]
-    S --> O4[ApplyFilterOperation]
     S --> O5[ProcessScanResultsOperation]
     S --> O6[ProcessFileResultOperation]
 
     O1 --> OS[OS open/startfile/xdg-open]
     O2 --> DB[(ContentDatabaseService)]
     O3 --> DB
-    O4 --> DB
-    O4 --> FTS[FileTypeService]
     O5 --> ST[(In-memory state)]
     O6 --> ST
 
