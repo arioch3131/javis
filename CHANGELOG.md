@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-04-18
+
+### Added
+- Added a dedicated extensible filtering architecture under `services/filtering/`:
+  - `ContentFilterService` orchestration pipeline
+  - `FilterRegistry` explicit plugin registration
+  - unified filtering contracts (`FilterCriterion`, `FilterOperationResult`, `FilterOperationCode`, `FilterOperator`, `FilterScope`)
+  - built-in plugins: `file_type`, `category`, `year`, `extension`
+- Added filter failure signaling/event flow for UI-level differentiation:
+  - `FileManager.filter_failed` signal
+  - `EventType.FILTER_ERROR` publishing in `SignalRouter`
+  - category-aware status/log notifications (`validation_error`, `unknown_filter`, `database_error`, `unknown_error`)
+- Added localized (`en`/`fr`) end-user templates for filter failure notifications in i18n catalogs.
+- Added unit test coverage for the new filtering layer:
+  - registry behavior (register/resolve/duplicate key)
+  - service pipeline behavior (validation/unknown plugin/combined filtering)
+  - plugin fallback behavior (year metadata fallback)
+  - strict filter-result contract tests for `FilterOperationResult` (`code`/`message`/`data` shape)
+
+### Changed
+- Migrated `FileManager` cumulative filtering to consume `ContentFilterService` directly.
+- Removed remaining filtering call-sites that routed through `FileOperationService`.
+- Kept filter behavior parity for cumulative `AND` filtering across file type, category, year, and extension.
+- Aligned filtering error mapping with file-operation contracts:
+  - added `validation_error`, `unknown_filter`, `database_error` in `FileOperationCode`
+  - mapped `FilterOperationCode` -> `FileOperationCode` in `FileManager` and `FileOperationService`
+- Made DB error propagation explicit in filtering when fallback is disabled:
+  - `ContentFilterService.apply_filters(..., allow_db_fallback=False)` now emits `FilterOperationCode.DATABASE_ERROR`.
+
+### Removed
+- Removed legacy filter operation module `services/file/operations/apply_filter_operation.py`.
+- Removed residual filtering shim API from `FileOperationService`:
+  - `apply_filter(...)`
+  - `apply_filter_to_list(...)`
+  - `apply_multi_category_filter_to_list(...)`
+  - `apply_multi_year_filter_to_list(...)`
+  - `apply_multi_extension_filter_to_list(...)`
+
+### Security
+- Bumped `pypdf` from `6.10.1` to `6.10.2` to address:
+  - manipulated FlateDecode image dimensions can exhaust RAM
+  - manipulated FlateDecode predictor parameters can exhaust RAM
+  - possible long runtimes for wrong size values in incremental mode
+
 ## [1.6.0] - 2026-04-16
 
 ### Added

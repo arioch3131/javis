@@ -100,5 +100,25 @@
       "changed_title": "Langue mise a jour",
       "changed_message": "La preference de langue est enregistree. Les menus principaux ont ete rafraichis. Certaines fenetres peuvent necessiter d'etre rouvertes."
     }
+  },
+  "filter": {
+    "error": {
+      "validation": {
+        "status": "Filtre non applique: valeur de filtre invalide",
+        "log": "⚠️ Erreur de validation du filtre: {reason}"
+      },
+      "unknown_filter": {
+        "status": "Filtre non applique: filtre non pris en charge",
+        "log": "⚠️ Type de filtre inconnu: {reason}"
+      },
+      "database": {
+        "status": "Filtre non applique: base de donnees indisponible",
+        "log": "❌ Erreur base de donnees pendant l'application des filtres: {reason}"
+      },
+      "unknown": {
+        "status": "Filtre non applique: erreur inattendue",
+        "log": "❌ Erreur de filtre inattendue: {reason}"
+      }
+    }
   }
 }

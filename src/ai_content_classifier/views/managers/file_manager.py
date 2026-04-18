@@ -21,6 +21,11 @@ from ai_content_classifier.services.database.content_database_service import (
 from ai_content_classifier.services.file.file_operation_service import (
     FileOperationService,
 )
+from ai_content_classifier.services.filtering import (
+    ContentFilterService,
+    FilterCriterion,
+    FilterOperationCode,
+)
 from ai_content_classifier.services.file.operations import FileOperationDataKey
 from ai_content_classifier.services.file.types import (
     FileOperationCode,
@@ -67,6 +72,9 @@ class FileManager(QObject):
     filter_applied = pyqtSignal(
         object, list
     )  # Filter applied (filter_type, filtered_files)
+    filter_failed = pyqtSignal(
+        str, str, dict
+    )  # Filter failed (code, message, active_filters)
     file_processed = pyqtSignal(
         str, bool, bool
     )  # (file_path, metadata_ok, thumbnail_ok)
@@ -97,6 +105,10 @@ class FileManager(QObject):
             config_service=config_service,
             metadata_service=metadata_service,
             thumbnail_service=thumbnail_service,
+        )
+        self.content_filter_service = ContentFilterService(
+            db_service=db_service,
+            logger=self.logger,
         )
 
         # Initialize state variables
@@ -175,7 +187,6 @@ class FileManager(QObject):
                 on_scan_error=self._on_service_scan_error,
                 on_file_processed=self._on_service_file_processed,
                 on_files_updated=self._on_service_files_updated,
-                on_filter_applied=self._on_service_filter_applied,
                 on_stats_updated=self._on_service_stats_updated,
             )
         except Exception as e:
@@ -218,13 +229,6 @@ class FileManager(QObject):
             self.filter_applied.emit(self._active_filters, filtered_files)
             return
         self.files_updated.emit(file_list)
-
-    def _on_service_filter_applied(
-        self, filter_type: FilterType, filtered_files: List[Tuple[str, str]]
-    ):
-        """Callback called when a filter is applied."""
-        # Emit the current active filters and the filtered files
-        self.filter_applied.emit(self._active_filters, filtered_files)
 
     def _on_service_stats_updated(self, stats: ScanStatistics):
         """Callback called when statistics are updated."""
@@ -762,7 +766,7 @@ class FileManager(QObject):
                 self.logger.warning(
                     f"❓ Unexpected filter_data type: {type(filter_data)}"
                 )
-                return self.file_service.apply_filter(FilterType.ALL_FILES)
+                return self._apply_cumulative_filters()
 
             filter_type = filter_data.get("type")
             filter_value = filter_data.get("value")
@@ -793,7 +797,7 @@ class FileManager(QObject):
 
         except Exception as e:
             self.logger.error(f"Error applying filter: {e}", exc_info=True)
-            return self.file_service.apply_filter(FilterType.ALL_FILES)
+            return self._apply_cumulative_filters()
 
     def remove_filter_by_id(self, filter_id: str):
         """
@@ -845,6 +849,11 @@ class FileManager(QObject):
             # Start with all files
             refresh_result = self.file_service.refresh_file_list()
             if not refresh_result.success:
+                self.filter_failed.emit(
+                    str(getattr(refresh_result.code, "value", refresh_result.code)),
+                    refresh_result.message,
+                    dict(self._active_filters),
+                )
                 return FileOperationResult(
                     success=False,
                     code=refresh_result.code,
@@ -862,35 +871,34 @@ class FileManager(QObject):
                     FileOperationDataKey.FILE_LIST.value, []
                 )
             )
-
-            # Apply file type filter
-            file_type_filters = self._active_filters.get("file_type", [])
-            if file_type_filters and file_type_filters[0] != "All Files":
-                filtered_files = self.file_service.apply_filter_to_list(
-                    filtered_files, FilterType(file_type_filters[0])
+            criteria = self._build_filter_criteria()
+            filtering_result = self.content_filter_service.apply_filters(
+                criteria=criteria,
+                scope={"base_items": filtered_files},
+                allow_db_fallback=False,
+            )
+            if not filtering_result.success:
+                mapped_code = self._map_filter_code_to_file_code(filtering_result.code)
+                self.filter_failed.emit(
+                    str(getattr(mapped_code, "value", mapped_code)),
+                    filtering_result.message,
+                    dict(self._active_filters),
+                )
+                return FileOperationResult(
+                    success=False,
+                    code=mapped_code,
+                    message=filtering_result.message,
+                    data={
+                        FileOperationDataKey.FILTERED_FILES.value: list(filtered_files),
+                        FileOperationDataKey.ERROR.value: (
+                            filtering_result.data or {}
+                        ).get("error", filtering_result.message),
+                    },
                 )
 
-            # Apply category filter
-            category_filters = self._active_filters.get("category", [])
-            if category_filters:
-                filtered_files = self.file_service.apply_multi_category_filter_to_list(
-                    filtered_files, category_filters
-                )
-
-            # Apply year filter
-            year_filters = self._active_filters.get("year", [])
-            if year_filters:
-                year_filters = self._normalize_year_filters(year_filters)
-                filtered_files = self.file_service.apply_multi_year_filter_to_list(
-                    filtered_files, year_filters
-                )
-
-            # Apply extension filter
-            extension_filters = self._active_filters.get("extension", [])
-            if extension_filters:
-                filtered_files = self.file_service.apply_multi_extension_filter_to_list(
-                    filtered_files, extension_filters
-                )
+            filtered_files = list(
+                (filtering_result.data or {}).get("filtered_files", [])
+            )
 
             self.logger.debug(
                 f"FileManager: Emitting files_updated with {len(filtered_files)} files"
@@ -920,38 +928,66 @@ class FileManager(QObject):
         self, file_list: List[Tuple[str, str]]
     ) -> List[Tuple[str, str]]:
         """Applies current active filters to a provided file list."""
-        filtered_files = list(file_list)
+        criteria = self._build_filter_criteria()
+        filtering_result = self.content_filter_service.apply_filters(
+            criteria=criteria,
+            scope={"base_items": list(file_list)},
+        )
+        if not filtering_result.success:
+            self.logger.warning(
+                "Unable to apply filters to provided file list: %s",
+                filtering_result.message,
+            )
+            return list(file_list)
+        return list((filtering_result.data or {}).get("filtered_files", []))
 
-        # Apply file type filter
+    def _map_filter_code_to_file_code(self, filter_code: Any) -> FileOperationCode:
+        """Map filtering-specific error codes to file operation error codes."""
+        normalized = str(getattr(filter_code, "value", filter_code)).lower()
+        mapping = {
+            FilterOperationCode.VALIDATION_ERROR.value: FileOperationCode.VALIDATION_ERROR,
+            FilterOperationCode.UNKNOWN_FILTER.value: FileOperationCode.UNKNOWN_FILTER,
+            FilterOperationCode.DATABASE_ERROR.value: FileOperationCode.DATABASE_ERROR,
+            FilterOperationCode.UNKNOWN_ERROR.value: FileOperationCode.UNKNOWN_ERROR,
+        }
+        return mapping.get(normalized, FileOperationCode.UNKNOWN_ERROR)
+
+    def _build_filter_criteria(self) -> List[FilterCriterion]:
+        """Build normalized criteria from current active filters."""
+        criteria: List[FilterCriterion] = []
+
         file_type_filters = self._active_filters.get("file_type", [])
         if file_type_filters and file_type_filters[0] != "All Files":
-            filtered_files = self.file_service.apply_filter_to_list(
-                filtered_files, FilterType(file_type_filters[0])
+            normalized_file_type = self._normalize_file_type_filter_value(
+                file_type_filters[0]
+            )
+            criteria.append(
+                FilterCriterion(key="file_type", op="eq", value=normalized_file_type)
             )
 
-        # Apply category filter
         category_filters = self._active_filters.get("category", [])
         if category_filters:
-            filtered_files = self.file_service.apply_multi_category_filter_to_list(
-                filtered_files, category_filters
+            criteria.append(
+                FilterCriterion(key="category", op="in", value=list(category_filters))
             )
 
-        # Apply year filter
-        year_filters = self._active_filters.get("year", [])
+        year_filters = self._normalize_year_filters(
+            self._active_filters.get("year", [])
+        )
         if year_filters:
-            year_filters = self._normalize_year_filters(year_filters)
-            filtered_files = self.file_service.apply_multi_year_filter_to_list(
-                filtered_files, year_filters
-            )
+            criteria.append(FilterCriterion(key="year", op="in", value=year_filters))
 
-        # Apply extension filter
         extension_filters = self._active_filters.get("extension", [])
         if extension_filters:
-            filtered_files = self.file_service.apply_multi_extension_filter_to_list(
-                filtered_files, extension_filters
+            criteria.append(
+                FilterCriterion(
+                    key="extension",
+                    op="in",
+                    value=[str(ext).lower() for ext in extension_filters],
+                )
             )
 
-        return filtered_files
+        return criteria
 
     def clear_filters(self):
         """
@@ -1412,11 +1448,6 @@ class FileManager(QObject):
     def current_files(self) -> List[Tuple[str, str]]:
         """Returns the current list of files."""
         return self.file_service.current_files
-
-    @property
-    def current_filter(self) -> str:
-        """Returns the currently applied filter."""
-        return self.file_service.current_filter.value
 
     @property
     def last_scan_stats(self) -> dict:

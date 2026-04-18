@@ -11,14 +11,13 @@ from ai_content_classifier.services.file.operations import FileOperationDataKey
 from ai_content_classifier.services.file.types import (
     FileOperationCode,
     FileOperationResult,
-    FilterType,
     ScanStatistics,
 )
 from ai_content_classifier.services.database.types import (
     DatabaseOperationCode,
     DatabaseOperationResult,
 )
-from ai_content_classifier.services.file.file_type_service import FileCategory
+from ai_content_classifier.services.filtering.types import FilterOperationCode
 
 
 def _db_ok(**data):
@@ -76,6 +75,25 @@ class TestFileOperationService:
         assert len(errors) == 1
         assert "processing scan results" in errors[0].lower()
 
+    def test_process_scan_results_operation_failure_notifies_error_callback(
+        self, service
+    ):
+        errors = []
+        service.set_callbacks(on_scan_error=errors.append)
+        service._process_scan_results_operation.execute = MagicMock(
+            return_value=FileOperationResult(
+                success=False,
+                code=FileOperationCode.UNKNOWN_ERROR,
+                message="scan failed",
+                data={},
+            )
+        )
+
+        result = service.process_scan_results([("/a.jpg", "/")])
+
+        assert result.success is False
+        assert errors == ["scan failed"]
+
     def test_process_file_result_updates_stats_and_callback(self, service):
         processed = []
         service.set_callbacks(on_file_processed=processed.append)
@@ -95,6 +113,23 @@ class TestFileOperationService:
         )
         assert result.success is False
         service.logger.error.assert_called()
+
+    def test_process_file_result_rejects_invalid_operation_payload(self, service):
+        service._process_file_result_operation.execute = MagicMock(
+            return_value=FileOperationResult(
+                success=True,
+                code=FileOperationCode.OK,
+                message="ok",
+                data={FileOperationDataKey.FILE_PROCESSING_RESULT.value: "invalid"},
+            )
+        )
+
+        result = service.process_file_result(
+            "/a.jpg", metadata_ok=True, thumbnail_ok=True
+        )
+
+        assert result.success is False
+        assert result.code == FileOperationCode.UNKNOWN_ERROR
 
     def test_refresh_file_list_success(self, service):
         valid_item = SimpleNamespace(path="/ok.jpg", directory="/ok")
@@ -124,231 +159,24 @@ class TestFileOperationService:
         assert result.data[FileOperationDataKey.FILE_LIST.value] == []
         assert len(errors) == 1
 
-    def test_apply_filter_all_files_and_multi_direct(self, service):
-        service._current_files = [("/a.jpg", "/")]
-        assert service.apply_filter(FilterType.ALL_FILES).data[
-            FileOperationDataKey.FILTERED_FILES.value
-        ] == [("/a.jpg", "/")]
-        assert service.apply_filter(FilterType.MULTI_CATEGORY).data[
-            FileOperationDataKey.FILTERED_FILES.value
-        ] == [("/a.jpg", "/")]
-        assert service.apply_filter(FilterType.MULTI_YEAR).data[
-            FileOperationDataKey.FILTERED_FILES.value
-        ] == [("/a.jpg", "/")]
-        assert service.apply_filter(FilterType.MULTI_EXTENSION).data[
-            FileOperationDataKey.FILTERED_FILES.value
-        ] == [("/a.jpg", "/")]
-
-    def test_apply_filter_uncategorized_uses_helper(self, service):
-        with patch.object(
-            service, "_filter_uncategorized", return_value=[("/u", "/")]
-        ) as helper:
-            result = service.apply_filter(FilterType.UNCATEGORIZED)
-        assert result.data[FileOperationDataKey.FILTERED_FILES.value] == [("/u", "/")]
-        helper.assert_called_once()
-
-    def test_apply_filter_standard_types_query_database(self, service):
-        fake_filter = MagicMock()
-        service.db_service.find_items.return_value = _db_ok(
-            items=[SimpleNamespace(path="/i.jpg", directory="/d")]
+    def test_refresh_file_list_operation_failure_notifies_error_callback(self, service):
+        errors = []
+        service.set_callbacks(on_scan_error=errors.append)
+        service._refresh_file_list_operation.execute = MagicMock(
+            return_value=FileOperationResult(
+                success=False,
+                code=FileOperationCode.UNKNOWN_ERROR,
+                message="refresh failed",
+                data={},
+            )
         )
-        with patch(
-            "ai_content_classifier.services.file.operations.apply_filter_operation.ContentFilter",
-            return_value=fake_filter,
-        ):
-            result = service.apply_filter(FilterType.IMAGES)
-        fake_filter.by_type.assert_called_once_with("image")
-        service.db_service.find_items.assert_called_once()
-        assert result.data[FileOperationDataKey.FILTERED_FILES.value] == [
-            ("/i.jpg", "/d")
-        ]
 
-    def test_apply_filter_unknown_fallbacks_to_extension_filter(self, service):
-        class UnknownFilter:
-            value = "unknown"
+        result = service.refresh_file_list()
 
-            def __eq__(self, _other):
-                return False
-
-        service.db_service.find_items.return_value = _db_ok(items=[])
-        with patch.object(
-            service, "_filter_files_by_type", return_value=[("/f", "/")]
-        ) as helper:
-            result = service.apply_filter(UnknownFilter())
-        helper.assert_called_once()
-        service.db_service.find_items.assert_not_called()
-        assert result.data[FileOperationDataKey.FILTERED_FILES.value] == [("/f", "/")]
-
-    def test_apply_filter_exception_returns_original(self, service):
-        service._current_files = [("/a", "/")]
-        service.db_service.find_items.side_effect = RuntimeError("oops")
-        result = service.apply_filter(FilterType.IMAGES)
         assert result.success is False
-        assert result.data[FileOperationDataKey.FILTERED_FILES.value] == [("/a", "/")]
+        assert errors == ["refresh failed"]
 
-    def test_apply_filter_to_list_for_categories(self, service):
-        files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.find_items.return_value = _db_ok(
-            items=[
-                SimpleNamespace(path="/a.jpg", category="Uncategorized"),
-                SimpleNamespace(path="/b.pdf", category="Uncategorized"),
-            ]
-        )
-        assert service.apply_filter_to_list(files, FilterType.ALL_FILES) == files
-        assert service.apply_filter_to_list(files, FilterType.UNCATEGORIZED) == files
-
-    def test_apply_filter_to_list_for_type_checks(self, service):
-        files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        with patch(
-            "ai_content_classifier.services.file.file_operation_service.FileTypeService.is_image_file",
-            side_effect=lambda p: p.endswith(".jpg"),
-        ):
-            assert service.apply_filter_to_list(files, FilterType.IMAGES) == [
-                ("/a.jpg", "/")
-            ]
-        with patch(
-            "ai_content_classifier.services.file.file_operation_service.FileTypeService.get_file_category",
-            return_value=FileCategory.OTHER,
-        ):
-            assert service.apply_filter_to_list(files, FilterType.OTHER) == files
-
-    def test_apply_multi_filters_to_list(self, service):
-        files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.find_items.side_effect = [
-            _db_ok(
-                items=[
-                    SimpleNamespace(
-                        path="/a.jpg",
-                        category="Work",
-                        year_taken=2020,
-                        date_created=None,
-                        date_modified=None,
-                        date_indexed=None,
-                        content_metadata=None,
-                    ),
-                    SimpleNamespace(
-                        path="/b.pdf",
-                        category="Personal",
-                        year_taken=None,
-                        date_created=SimpleNamespace(year=2021),
-                        date_modified=None,
-                        date_indexed=None,
-                        content_metadata=None,
-                    ),
-                ]
-            ),
-            _db_ok(
-                items=[
-                    SimpleNamespace(
-                        path="/a.jpg",
-                        category="X",
-                        year_taken=2020,
-                        date_created=None,
-                        date_modified=None,
-                        date_indexed=None,
-                        content_metadata=None,
-                    ),
-                    SimpleNamespace(
-                        path="/b.pdf",
-                        category="Y",
-                        year_taken=None,
-                        date_created=SimpleNamespace(year=2021),
-                        date_modified=None,
-                        date_indexed=None,
-                        content_metadata=None,
-                    ),
-                ]
-            ),
-        ]
-        assert service.apply_multi_category_filter_to_list(files, ["Work"]) == [
-            ("/a.jpg", "/")
-        ]
-
-        assert service.apply_multi_year_filter_to_list(files, [2021]) == [
-            ("/b.pdf", "/")
-        ]
-        assert service.apply_multi_extension_filter_to_list(files, ["jpg"]) == [
-            ("/a.jpg", "/")
-        ]
-
-    def test_apply_multi_category_filter_reuses_refresh_snapshot_cache(self, service):
-        files = [("/a.jpg", "/"), ("/b.jpg", "/")]
-        service._current_content_by_path = {
-            "/a.jpg": SimpleNamespace(path="/a.jpg", category="Work"),
-            "/b.jpg": SimpleNamespace(path="/b.jpg", category="Personal"),
-        }
-
-        result = service.apply_multi_category_filter_to_list(files, ["Work"])
-
-        assert result == [("/a.jpg", "/")]
-        service.db_service.find_items.assert_not_called()
-
-    def test_get_content_items_by_path_batches_large_inputs(self, service):
-        files = [(f"/tmp/{idx}.txt", "/tmp") for idx in range(1205)]
-        service.db_service.find_items.side_effect = [
-            _db_ok(items=[SimpleNamespace(path="/tmp/0.txt", category="A")]),
-            _db_ok(items=[SimpleNamespace(path="/tmp/801.txt", category="B")]),
-        ]
-
-        result = service._get_content_items_by_path(files, batch_size=800)
-
-        assert result["/tmp/0.txt"].category == "A"
-        assert result["/tmp/801.txt"].category == "B"
-        assert service.db_service.find_items.call_count == 2
-        for call in service.db_service.find_items.call_args_list:
-            assert call.kwargs["eager_load"] is False
-
-    def test_apply_multi_year_filter_to_list_with_metadata_and_mtime_fallback(
-        self, service
-    ):
-        files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        service.db_service.find_items.return_value = _db_ok(
-            items=[
-                SimpleNamespace(
-                    category="Work",
-                    path="/a.jpg",
-                    year_taken=None,
-                    date_created=None,
-                    date_modified=None,
-                    date_indexed=None,
-                    content_metadata={"DateTimeOriginal": "2021:05:04 12:00:00"},
-                ),
-                SimpleNamespace(
-                    category="Personal",
-                    path="/b.pdf",
-                    year_taken=None,
-                    date_created=None,
-                    date_modified=None,
-                    date_indexed=None,
-                    content_metadata=None,
-                ),
-            ]
-        )
-
-        with patch(
-            "ai_content_classifier.services.file.file_operation_service.os.path.getmtime",
-            return_value=1640995200,  # 2022-01-01 UTC
-        ):
-            assert service.apply_multi_year_filter_to_list(files, [2021, 2022]) == [
-                ("/a.jpg", "/"),
-                ("/b.pdf", "/"),
-            ]
-
-    def test_private_filters_and_utilities(self, service):
-        service.db_service.find_items.return_value = _db_ok(
-            items=[SimpleNamespace(path="/u", directory="/", category="Uncategorized")]
-        )
-        assert service._filter_uncategorized() == [("/u", "/")]
-        service.db_service.find_items.side_effect = RuntimeError("fail")
-        assert service._filter_uncategorized() == []
-
-        service._current_files = [("/x.unk", "/")]
-        with patch(
-            "ai_content_classifier.services.file.file_operation_service.FileTypeService.get_file_category",
-            return_value=FileCategory.OTHER,
-        ):
-            assert service._filter_files_by_type(FilterType.OTHER) == [("/x.unk", "/")]
-
+    def test_utilities(self, service):
         service.thumbnail_service.get_thumbnail_path.return_value = "/thumb.png"
         assert service.get_thumbnail_path("/a.jpg") == "/thumb.png"
         service.thumbnail_service.get_thumbnail_path.side_effect = RuntimeError("e")
@@ -361,16 +189,14 @@ class TestFileOperationService:
 
     def test_get_file_count_by_type_properties_and_cleanup(self, service):
         service._current_files = [("/a.jpg", "/"), ("/b.pdf", "/")]
-        with patch.object(
-            service, "_filter_files_by_type", return_value=[("/a.jpg", "/")]
-        ):
-            counts = service.get_file_count_by_type()
+        service.db_service.find_items.side_effect = RuntimeError("db unavailable")
+        counts = service.get_file_count_by_type()
         assert counts["All Files"] == 2
+        assert counts["Images"] == 1
         assert "multi_category" not in counts
 
         assert service.file_count == 2
         assert service.current_files == [("/a.jpg", "/"), ("/b.pdf", "/")]
-        assert service.current_filter == FilterType.ALL_FILES
 
         service.cleanup()
         service.thumbnail_service.cleanup.assert_called_once()
@@ -378,17 +204,115 @@ class TestFileOperationService:
         assert service.file_count == 0
         assert isinstance(service.last_scan_stats, ScanStatistics)
 
-    def test_clear_current_files_resets_filter_and_stats(self, service):
+    def test_get_file_count_by_type_handles_internal_exception(self, service):
+        service._current_files = [("/a.jpg", "/")]
+        service._run_filter_criteria = MagicMock(side_effect=RuntimeError("boom"))
+
+        counts = service.get_file_count_by_type()
+
+        assert counts == {}
+
+    def test_clear_current_files_resets_state_and_stats(self, service):
         service._current_files = [("/a.jpg", "/")]
         service._current_content_by_path = {"/a.jpg": SimpleNamespace(path="/a.jpg")}
-        service._current_filter = FilterType.IMAGES
         service._last_scan_stats.files_found = 42
 
         service.clear_current_files()
 
         assert service.current_files == []
-        assert service.current_filter == FilterType.ALL_FILES
         assert service.last_scan_stats.files_found == 0
+
+    def test_resolve_thumbnail_cache_dir_for_platforms(self, service):
+        with patch(
+            "ai_content_classifier.services.file.file_operation_service.sys.platform",
+            "win32",
+        ):
+            win_path = service._resolve_thumbnail_cache_dir()
+        with patch(
+            "ai_content_classifier.services.file.file_operation_service.sys.platform",
+            "darwin",
+        ):
+            mac_path = service._resolve_thumbnail_cache_dir()
+        with patch(
+            "ai_content_classifier.services.file.file_operation_service.sys.platform",
+            "linux",
+        ):
+            linux_path = service._resolve_thumbnail_cache_dir()
+
+        assert win_path.endswith("thumbnails")
+        assert mac_path.endswith("thumbnails")
+        assert linux_path.endswith("thumbnails")
+
+    def test_clear_thumbnail_disk_cache_runtime_and_fallback_paths(self, service):
+        runtime = MagicMock()
+        with patch(
+            "ai_content_classifier.services.file.file_operation_service.get_cache_runtime",
+            return_value=runtime,
+        ):
+            runtime.clear.return_value = True
+            service.clear_thumbnail_disk_cache()
+            runtime.clear.assert_called_with(adapter="thumbnail_disk")
+
+        runtime = MagicMock()
+        with (
+            patch(
+                "ai_content_classifier.services.file.file_operation_service.get_cache_runtime",
+                return_value=runtime,
+            ),
+            patch(
+                "ai_content_classifier.services.file.file_operation_service.os.path.isdir",
+                return_value=False,
+            ),
+        ):
+            runtime.clear.side_effect = RuntimeError("cache down")
+            service.clear_thumbnail_disk_cache()
+
+        runtime = MagicMock()
+        with (
+            patch(
+                "ai_content_classifier.services.file.file_operation_service.get_cache_runtime",
+                return_value=runtime,
+            ),
+            patch(
+                "ai_content_classifier.services.file.file_operation_service.os.path.isdir",
+                return_value=True,
+            ),
+            patch(
+                "ai_content_classifier.services.file.file_operation_service.shutil.rmtree",
+                side_effect=OSError("cannot remove"),
+            ),
+        ):
+            runtime.clear.return_value = False
+            service.clear_thumbnail_disk_cache()
+
+    def test_cleanup_handles_dependency_exceptions(self, service):
+        service.thumbnail_service.cleanup.side_effect = RuntimeError("fail")
+
+        service.cleanup()
+
+        service.logger.error.assert_called()
+
+    def test_run_filter_criteria_maps_database_error_code(self, service):
+        service._content_filter_service.apply_filters = MagicMock(
+            return_value=SimpleNamespace(
+                success=False,
+                code=FilterOperationCode.DATABASE_ERROR,
+                message="db issue",
+                data={"error": "db issue"},
+            )
+        )
+
+        result = service._run_filter_criteria(
+            criteria=[],
+            base_items=[("/tmp/a.jpg", "/tmp")],
+            allow_db_fallback=False,
+        )
+
+        assert result.success is False
+        assert result.code == FileOperationCode.DATABASE_ERROR
+        assert result.data[FileOperationDataKey.FILTERED_FILES.value] == [
+            ("/tmp/a.jpg", "/tmp")
+        ]
 
     def test_open_file_returns_file_not_found_when_path_missing(self, service):
         result = service.open_file("")

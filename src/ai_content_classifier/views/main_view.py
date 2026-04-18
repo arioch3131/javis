@@ -404,6 +404,12 @@ class MainView(QObject):
                 f"Filter applied: {payload.get('filtered_count', 0)} files "
                 f"({payload.get('active_filters', {})})"
             )
+        elif event.event_type == EventType.FILTER_ERROR:
+            label = (
+                "Filter error: "
+                f"{payload.get('code', 'unknown_error')} - "
+                f"{payload.get('error_message', 'Unknown error')}"
+            )
         elif event.event_type == EventType.CATEGORIZATION_STARTED:
             label = (
                 f"Categorization started: {payload.get('file_count', 0)} files, "

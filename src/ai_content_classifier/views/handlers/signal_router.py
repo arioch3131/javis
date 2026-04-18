@@ -18,10 +18,12 @@ from ai_content_classifier.controllers.auto_organization_controller import (
 )
 from ai_content_classifier.core.logger import get_logger
 from PyQt6.QtCore import QObject, Qt
+from ai_content_classifier.services.i18n.i18n_service import tr
 from ai_content_classifier.views.main_window.main import MainWindow
 from ai_content_classifier.views.managers.connection_manager import ConnectionManager
 from ai_content_classifier.views.managers.file_manager import FileManager
 from ai_content_classifier.views.managers.settings_manager import SettingsManager
+from ai_content_classifier.services.file.types import FileOperationCode
 from ai_content_classifier.views.events.event_bus import EventBus
 from ai_content_classifier.views.events.event_types import EventType
 from ai_content_classifier.views.presenters.file_presenter import FilePresenter
@@ -197,6 +199,9 @@ class SignalRouter(QObject):
         # Filter applied → File Presenter + Status Presenter
         self.file_manager.filter_applied.connect(
             self._on_filter_applied, Qt.ConnectionType.QueuedConnection
+        )
+        self.file_manager.filter_failed.connect(
+            self._on_filter_failed, Qt.ConnectionType.QueuedConnection
         )
 
         # Filter removed from chips → File Manager (to update filters)
@@ -483,6 +488,93 @@ class SignalRouter(QObject):
             if self.status_presenter:
                 self.status_presenter.log_message(f"❌ Filter error: {e}", "ERROR")
 
+    def _on_filter_failed(
+        self,
+        code: str,
+        error_message: str,
+        active_filters: dict[str, Any],
+    ):
+        """Handler: filter application failed."""
+        normalized_code = str(code or FileOperationCode.UNKNOWN_ERROR.value).lower()
+        self._publish_event(
+            EventType.FILTER_ERROR,
+            {
+                "code": normalized_code,
+                "error_message": error_message,
+                "active_filters": active_filters,
+            },
+        )
+
+        if not self.status_presenter:
+            return
+
+        level, status_message, log_message = self._build_filter_failure_notification(
+            normalized_code=normalized_code,
+            error_message=error_message,
+        )
+        self.status_presenter.update_status(status_message, is_busy=False)
+        self.status_presenter.log_message(log_message, level)
+
+    def _build_filter_failure_notification(
+        self,
+        normalized_code: str,
+        error_message: str,
+    ) -> tuple[str, str, str]:
+        """Build a user-facing, category-aware filter failure notification."""
+        reason = str(error_message or "").strip() or "No details provided."
+
+        if normalized_code == FileOperationCode.VALIDATION_ERROR.value:
+            return (
+                "WARNING",
+                tr(
+                    "filter.error.validation.status",
+                    "Filter not applied: invalid filter value",
+                ),
+                tr(
+                    "filter.error.validation.log",
+                    "⚠️ Filter validation error: {reason}",
+                    reason=reason,
+                ),
+            )
+        if normalized_code == FileOperationCode.UNKNOWN_FILTER.value:
+            return (
+                "WARNING",
+                tr(
+                    "filter.error.unknown_filter.status",
+                    "Filter not applied: unsupported filter",
+                ),
+                tr(
+                    "filter.error.unknown_filter.log",
+                    "⚠️ Unknown filter type: {reason}",
+                    reason=reason,
+                ),
+            )
+        if normalized_code == FileOperationCode.DATABASE_ERROR.value:
+            return (
+                "ERROR",
+                tr(
+                    "filter.error.database.status",
+                    "Filter not applied: database unavailable",
+                ),
+                tr(
+                    "filter.error.database.log",
+                    "❌ Database error while applying filters: {reason}",
+                    reason=reason,
+                ),
+            )
+        return (
+            "ERROR",
+            tr(
+                "filter.error.unknown.status",
+                "Filter not applied: unexpected error",
+            ),
+            tr(
+                "filter.error.unknown.log",
+                "❌ Unexpected filter error: {reason}",
+                reason=reason,
+            ),
+        )
+
     # =========================================================================
     # ✅ NOUVEAUX SLOTS POUR AUTO-ORGANIZATION CONTROLLER
     # =========================================================================
@@ -630,6 +722,7 @@ class SignalRouter(QObject):
                 self.file_manager.scan_error.disconnect()
                 self.file_manager.files_updated.disconnect()
                 self.file_manager.filter_applied.disconnect()
+                self.file_manager.filter_failed.disconnect()
                 if hasattr(self.main_window, "active_filters_bar"):
                     self.main_window.active_filters_bar.filter_removed.disconnect()
 

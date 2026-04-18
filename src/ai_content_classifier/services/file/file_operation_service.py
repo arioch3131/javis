@@ -3,15 +3,12 @@
 File Operation Service.
 
 This module provides a pure Python service for managing file-related operations
-within the application. It encapsulates all business logic concerning file scanning,
-processing, and filtering, without any direct dependencies on Qt, making it highly
+within the application. It encapsulates business logic for file scanning,
+processing, open/remove operations, without any direct dependencies on Qt, making it highly
 testable and reusable. Communication with higher layers is achieved through callbacks.
-
-ENHANCED VERSION: Now supports multi-selection filters and centralized file type detection.
 """
 
 import os
-import re
 import shutil
 import sys
 
@@ -23,10 +20,7 @@ from ai_content_classifier.services.settings.config_service import ConfigService
 from ai_content_classifier.services.database.content_database_service import (
     ContentDatabaseService,
 )
-from ai_content_classifier.models.content_models import ContentItem
-from ai_content_classifier.services.file.file_type_service import FileTypeService
 from ai_content_classifier.services.file.operations import (
-    ApplyFilterOperation,
     FileOperationDataKey,
     OpenFileOperation,
     ProcessFileResultOperation,
@@ -41,6 +35,10 @@ from ai_content_classifier.services.file.types import (
     FileProcessingResult,
     ScanStatistics,
 )
+from ai_content_classifier.services.filtering import (
+    ContentFilterService,
+    FilterCriterion,
+)
 from ai_content_classifier.services.metadata.metadata_service import MetadataService
 from ai_content_classifier.services.shared.cache_runtime import get_cache_runtime
 from ai_content_classifier.services.thumbnail.thumbnail_service import ThumbnailService
@@ -54,8 +52,6 @@ class FileOperationService(LoggableMixin):
     including scanning directories, processing individual files (metadata extraction,
     thumbnail generation), and filtering file lists. It is designed to be independent
     of any UI framework (e.g., Qt) and communicates with other components via callbacks.
-
-    ENHANCED VERSION: Now supports multi-selection filters and uses centralized file type detection.
 
     Attributes:
         db_service (ContentDatabaseService): Service for interacting with the content database.
@@ -99,7 +95,6 @@ class FileOperationService(LoggableMixin):
             Tuple[str, str]
         ] = []  # Stores (file_path, directory) tuples.
         self._current_content_by_path: Dict[str, Any] = {}
-        self._current_filter: FilterType = FilterType.ALL_FILES
         self._last_scan_stats = ScanStatistics()
         self._open_file_operation = OpenFileOperation(logger=self.logger)
         self._remove_from_db_operation = RemoveFilesFromDatabaseOperation(
@@ -110,7 +105,7 @@ class FileOperationService(LoggableMixin):
             db_service=self.db_service,
             logger=self.logger,
         )
-        self._apply_filter_operation = ApplyFilterOperation(
+        self._content_filter_service = ContentFilterService(
             db_service=self.db_service,
             logger=self.logger,
         )
@@ -130,14 +125,9 @@ class FileOperationService(LoggableMixin):
         self._on_scan_error: Optional[Callable[[str], None]] = None
         self._on_file_processed: Optional[Callable[[FileProcessingResult], None]] = None
         self._on_files_updated: Optional[Callable[[List[Tuple[str, str]]], None]] = None
-        self._on_filter_applied: Optional[
-            Callable[[FilterType, List[Tuple[str, str]]], None]
-        ] = None
         self._on_stats_updated: Optional[Callable[[ScanStatistics], None]] = None
 
-        self.logger.info(
-            "Enhanced FileOperationService initialized with multi-filter support."
-        )
+        self.logger.info("FileOperationService initialized.")
 
     # === CALLBACK CONFIGURATION ===
 
@@ -149,9 +139,6 @@ class FileOperationService(LoggableMixin):
         on_scan_error: Optional[Callable[[str], None]] = None,
         on_file_processed: Optional[Callable[[FileProcessingResult], None]] = None,
         on_files_updated: Optional[Callable[[List[Tuple[str, str]]], None]] = None,
-        on_filter_applied: Optional[
-            Callable[[FilterType, List[Tuple[str, str]]], None]
-        ] = None,
         on_stats_updated: Optional[Callable[[ScanStatistics], None]] = None,
     ) -> None:
         """
@@ -166,7 +153,6 @@ class FileOperationService(LoggableMixin):
         self._on_scan_error = on_scan_error
         self._on_file_processed = on_file_processed
         self._on_files_updated = on_files_updated
-        self._on_filter_applied = on_filter_applied
         self._on_stats_updated = on_stats_updated
 
     # === SCAN OPERATIONS ===
@@ -396,7 +382,6 @@ class FileOperationService(LoggableMixin):
         """
         self._current_files = []
         self._current_content_by_path = {}
-        self._current_filter = FilterType.ALL_FILES
         self._last_scan_stats = ScanStatistics()
 
     @staticmethod
@@ -444,328 +429,68 @@ class FileOperationService(LoggableMixin):
         except Exception as e:
             self.logger.warning(f"Unable to clear thumbnail disk cache: {e}")
 
-    # === ENHANCED FILTERING SYSTEM ===
+    # === FILTERING DELEGATION (for aggregate counters only) ===
 
-    def apply_filter(self, filter_type: FilterType) -> FileOperationResult:
-        """
-        Applies a specified filter type to the current list of files.
-
-        This method filters the `_current_files` based on the `filter_type`
-        and updates the `_current_filter` state. It then notifies via callback.
-
-        Args:
-            filter_type (FilterType): The type of filter to apply (e.g., `FilterType.IMAGES`).
-
-        Returns:
-            List[Tuple[str, str]]: A list of files that match the applied filter criteria.
-        """
+    def _run_filter_criteria(
+        self,
+        criteria: List[FilterCriterion],
+        base_items: List[Tuple[str, str]],
+        allow_db_fallback: bool = True,
+    ) -> FileOperationResult:
+        """Compatibility shim delegating filtering to ContentFilterService."""
         try:
-            operation_result = self._apply_filter_operation.execute(
-                filter_type=filter_type,
-                current_files=self._current_files,
-                filter_uncategorized=self._filter_uncategorized,
-                filter_files_by_type=self._filter_files_by_type,
+            filtering_result = self._content_filter_service.apply_filters(
+                criteria=criteria,
+                scope={
+                    "base_items": list(base_items),
+                    "content_by_path": dict(self._current_content_by_path),
+                },
+                allow_db_fallback=allow_db_fallback,
             )
-            if not operation_result.success:
-                error_msg = operation_result.message or "Failed to apply filter."
-                self.logger.error(error_msg)
-                if self._on_scan_error:
-                    self._on_scan_error(error_msg)
-                return operation_result
-            filtered_files = operation_result.data.get(
-                FileOperationDataKey.FILTERED_FILES.value, []
+            if not filtering_result.success:
+                return FileOperationResult(
+                    success=False,
+                    code=self._map_filter_code_to_file_code(filtering_result.code),
+                    message=filtering_result.message,
+                    data={
+                        FileOperationDataKey.ERROR.value: (
+                            filtering_result.data or {}
+                        ).get("error", filtering_result.message),
+                        FileOperationDataKey.FILTERED_FILES.value: list(base_items),
+                    },
+                )
+
+            filtered_files = list(
+                (filtering_result.data or {}).get("filtered_files", list(base_items))
             )
-
-            self._current_filter = filter_type
-
-            # Notify the callback about the applied filter and the resulting file list.
-            if self._on_filter_applied:
-                self._on_filter_applied(filter_type, filtered_files)
-            return operation_result
-
-        except Exception as e:
-            error_msg = f"An error occurred while applying the filter: {str(e)}"
-            self.logger.error(error_msg, exc_info=True)
-            if self._on_scan_error:
-                self._on_scan_error(error_msg)
+            return FileOperationResult(
+                success=True,
+                code=FileOperationCode.OK,
+                message=filtering_result.message,
+                data={FileOperationDataKey.FILTERED_FILES.value: filtered_files},
+            )
+        except Exception as exc:
+            self.logger.error("Delegated filtering failed: %s", exc, exc_info=True)
             return FileOperationResult(
                 success=False,
                 code=FileOperationCode.UNKNOWN_ERROR,
-                message=error_msg,
+                message="Unable to apply filter due to an unexpected error.",
                 data={
-                    FileOperationDataKey.FILTERED_FILES.value: self._current_files.copy()
+                    FileOperationDataKey.ERROR.value: str(exc),
+                    FileOperationDataKey.FILTERED_FILES.value: list(base_items),
                 },
             )
 
-    # === NEW: MULTI-SELECTION FILTER METHODS ===
-
-    def apply_filter_to_list(
-        self, file_list: List[Tuple[str, str]], filter_type: FilterType
-    ) -> List[Tuple[str, str]]:
-        """
-        Applies a specified filter type to a given list of files.
-        This method is used for cumulative filtering.
-        """
-        if filter_type == FilterType.ALL_FILES:
-            return file_list
-        elif filter_type == FilterType.UNCATEGORIZED:
-            content_map = self._get_content_items_by_path(file_list)
-            return [
-                (path, directory)
-                for path, directory in file_list
-                if content_map.get(path)
-                and content_map[path].category == "Uncategorized"
-            ]
-        else:
-            filtered_files = []
-            predicate = self._resolve_filter_predicate(filter_type)
-            if predicate is None:
-                return filtered_files
-            for file_path, directory in file_list:
-                if predicate(file_path):
-                    filtered_files.append((file_path, directory))
-            return filtered_files
-
-    def apply_multi_category_filter_to_list(
-        self, file_list: List[Tuple[str, str]], categories: List[str]
-    ) -> List[Tuple[str, str]]:
-        """
-        Applies a multi-category filter to a given list of files.
-        """
-        content_map = self._get_content_items_by_path(file_list)
-        filtered_files = []
-        for file_path, directory in file_list:
-            content_item = content_map.get(file_path)
-            if content_item and content_item.category in categories:
-                filtered_files.append((file_path, directory))
-        return filtered_files
-
-    def apply_multi_year_filter_to_list(
-        self, file_list: List[Tuple[str, str]], years: List[int]
-    ) -> List[Tuple[str, str]]:
-        """
-        Applies a multi-year filter to a given list of files.
-        """
-        normalized_years = set()
-        for year in years:
-            try:
-                normalized_years.add(int(year))
-            except (TypeError, ValueError):
-                continue
-
-        if not normalized_years:
-            return []
-
-        content_map = self._get_content_items_by_path(file_list)
-        filtered_files = []
-        for file_path, directory in file_list:
-            content_item = content_map.get(file_path)
-            if content_item:
-                file_year = self._resolve_file_year(content_item, file_path)
-                if file_year and int(file_year) in normalized_years:
-                    filtered_files.append((file_path, directory))
-        return filtered_files
-
-    def _get_content_items_by_path(
-        self, file_list: List[Tuple[str, str]], batch_size: int = 800
-    ) -> Dict[str, Any]:
-        """
-        Load content rows for a file list in batches to avoid N+1 queries.
-
-        SQLite has a limit on bound parameters, so we chunk IN clauses.
-        """
-        unique_paths = [path for path, _ in file_list if path]
-        if not unique_paths:
-            return {}
-
-        unique_paths = list(dict.fromkeys(unique_paths))
-        path_to_item: Dict[str, Any] = {}
-
-        # Fast path: rely on refresh snapshot if available.
-        if self._current_content_by_path:
-            missing_paths: List[str] = []
-            for path in unique_paths:
-                cached_item = self._current_content_by_path.get(path)
-                if cached_item is not None:
-                    path_to_item[path] = cached_item
-                else:
-                    missing_paths.append(path)
-            if not missing_paths:
-                return path_to_item
-            unique_paths = missing_paths
-
-        for index in range(0, len(unique_paths), batch_size):
-            batch_paths = unique_paths[index : index + batch_size]
-            batch_result = self.db_service.find_items(
-                custom_filter=[ContentItem.path.in_(batch_paths)],
-                eager_load=False,
-            )
-            if not batch_result.success:
-                self.logger.warning(
-                    "Batch DB read failed for file map: code=%s message=%s",
-                    batch_result.code,
-                    batch_result.message,
-                )
-                continue
-            batch_items = (batch_result.data or {}).get("items", [])
-            for item in batch_items:
-                if hasattr(item, "path"):
-                    path_to_item[item.path] = item
-                    self._current_content_by_path[item.path] = item
-
-        return path_to_item
-
-    def _resolve_file_year(self, content_item: Any, file_path: str) -> Optional[int]:
-        """Resolve a file year from content fields, metadata, then filesystem mtime."""
-        year_taken = getattr(content_item, "year_taken", None)
-        if year_taken is not None:
-            try:
-                normalized_year = int(year_taken)
-                if 1900 <= normalized_year <= 2100:
-                    return normalized_year
-            except (TypeError, ValueError):
-                pass
-
-        for attr_name in ("date_created", "date_modified", "date_indexed"):
-            raw_date = getattr(content_item, attr_name, None)
-            year_value = getattr(raw_date, "year", None) if raw_date else None
-            if year_value is not None:
-                try:
-                    normalized_year = int(year_value)
-                    if 1900 <= normalized_year <= 2100:
-                        return normalized_year
-                except (TypeError, ValueError):
-                    pass
-
-        metadata = getattr(content_item, "content_metadata", None) or {}
-        for date_key in (
-            "year",
-            "year_taken",
-            "creation_date",
-            "date_created",
-            "date",
-            "created",
-            "timestamp",
-            "DateTimeOriginal",
-            "datetime_original",
-        ):
-            if date_key in metadata and metadata[date_key] is not None:
-                metadata_year = self._extract_year_from_value(metadata[date_key])
-                if metadata_year:
-                    return metadata_year
-
-        try:
-            from datetime import datetime
-
-            return datetime.fromtimestamp(os.path.getmtime(file_path)).year
-        except (OSError, OverflowError, ValueError):
-            return None
-
-    def _extract_year_from_value(self, raw_value: Any) -> Optional[int]:
-        """Extract a valid year (1900-2100) from arbitrary metadata values."""
-        if raw_value is None:
-            return None
-
-        if isinstance(raw_value, int):
-            return raw_value if 1900 <= raw_value <= 2100 else None
-
-        text = str(raw_value).strip()
-        if not text:
-            return None
-
-        match = re.search(r"(19\d{2}|20\d{2}|2100)", text)
-        if not match:
-            return None
-
-        year = int(match.group(1))
-        return year if 1900 <= year <= 2100 else None
-
-    def apply_multi_extension_filter_to_list(
-        self, file_list: List[Tuple[str, str]], extensions: List[str]
-    ) -> List[Tuple[str, str]]:
-        """
-        Applies a multi-extension filter to a given list of files.
-        """
-        filtered_files = []
-        normalized_extensions = []
-        for ext in extensions:
-            if not ext.startswith("."):
-                ext = "." + ext
-            normalized_extensions.append(ext.lower())
-
-        for file_path, directory in file_list:
-            file_ext = os.path.splitext(file_path)[1].lower()
-            if file_ext in normalized_extensions:
-                filtered_files.append((file_path, directory))
-        return filtered_files
-
-    # === ENHANCED FILTERING HELPERS ===
-
-    def _filter_uncategorized(self) -> List[Tuple[str, str]]:
-        """Filter files that are uncategorized."""
-        try:
-            # Use find_items() instead of get_all_content_items()
-            all_files_result = self.db_service.find_items()
-            if not all_files_result.success:
-                self.logger.warning(
-                    "Unable to load uncategorized candidates from DB: code=%s message=%s",
-                    all_files_result.code,
-                    all_files_result.message,
-                )
-                return []
-            all_files = (all_files_result.data or {}).get("items", [])
-            filtered_files = []
-
-            for content_item in all_files:
-                if content_item.category == "Uncategorized":
-                    filtered_files.append((content_item.path, content_item.directory))
-
-            return filtered_files
-        except Exception as e:
-            self.logger.error(f"Error filtering uncategorized files: {e}")
-            return []
-
-    def _filter_files_by_type(self, filter_type: FilterType) -> List[Tuple[str, str]]:
-        """
-        Enhanced helper method to filter files by type using centralized FileTypeService.
-
-        Args:
-            filter_type (FilterType): The specific type of filter to apply.
-
-        Returns:
-            List[Tuple[str, str]]: A new list containing only the files that match the specified type.
-        """
-        filtered_files = []
-        predicate = self._resolve_filter_predicate(filter_type)
-        if predicate is None:
-            return filtered_files
-
-        try:
-            for file_path, directory in self._current_files:
-                if predicate(file_path):
-                    filtered_files.append((file_path, directory))
-
-        except Exception as e:
-            self.logger.error(f"Error in _filter_files_by_type: {e}")
-
-        return filtered_files
-
-    def _resolve_filter_predicate(
-        self, filter_type: FilterType
-    ) -> Optional[Callable[[str], bool]]:
-        """Resolve file-type predicate for local extension/category filtering."""
-        predicates: Dict[FilterType, Callable[[str], bool]] = {
-            FilterType.IMAGES: FileTypeService.is_image_file,
-            FilterType.DOCUMENTS: FileTypeService.is_document_file,
-            FilterType.VIDEOS: FileTypeService.is_video_file,
-            FilterType.AUDIO: FileTypeService.is_audio_file,
-            FilterType.ARCHIVES: FileTypeService.is_archive_file,
-            FilterType.CODE: FileTypeService.is_code_file,
-            FilterType.OTHER: lambda path: (
-                FileTypeService.get_file_category(path).value == "Other"
-            ),
+    def _map_filter_code_to_file_code(self, filter_code: Any) -> FileOperationCode:
+        """Map filtering-specific error codes to file operation error codes."""
+        normalized = str(getattr(filter_code, "value", filter_code)).lower()
+        mapping = {
+            "validation_error": FileOperationCode.VALIDATION_ERROR,
+            "unknown_filter": FileOperationCode.UNKNOWN_FILTER,
+            "database_error": FileOperationCode.DATABASE_ERROR,
+            "unknown_error": FileOperationCode.UNKNOWN_ERROR,
         }
-        return predicates.get(filter_type)
+        return mapping.get(normalized, FileOperationCode.UNKNOWN_ERROR)
 
     # === UTILITIES AND METADATA ===
 
@@ -829,8 +554,17 @@ class FileOperationService(LoggableMixin):
                     # Skip multi-filter types in count calculations
                     continue
                 else:
-                    # Use the internal filtering method to count files for each type.
-                    filtered = self._filter_files_by_type(filter_type)
+                    # Delegate all filtering to the dedicated content filter service.
+                    criterion = FilterCriterion(
+                        key="file_type",
+                        op="eq",
+                        value=filter_type.value,
+                    )
+                    result = self._run_filter_criteria([criterion], self._current_files)
+                    filtered = (result.data or {}).get(
+                        FileOperationDataKey.FILTERED_FILES.value,
+                        [],
+                    )
                     counts[filter_type.value] = len(filtered)
 
             return counts
@@ -850,16 +584,6 @@ class FileOperationService(LoggableMixin):
             List[Tuple[str, str]]: A list of (file_path, directory) tuples.
         """
         return self._current_files.copy()
-
-    @property
-    def current_filter(self) -> FilterType:
-        """
-        Returns the `FilterType` that is currently applied to the file list.
-
-        Returns:
-            FilterType: The active filter type.
-        """
-        return self._current_filter
 
     @property
     def last_scan_stats(self) -> ScanStatistics:

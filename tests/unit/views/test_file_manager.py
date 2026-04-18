@@ -1,5 +1,6 @@
 import sys
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 
@@ -12,8 +13,10 @@ from ai_content_classifier.views.managers.file_manager import FileManager  # noq
 from ai_content_classifier.services.file.types import (  # noqa: E402
     FileOperationCode,
     FileOperationResult,
+    FilterType,
 )
 from ai_content_classifier.services.file.operations import FileOperationDataKey  # noqa: E402
+from ai_content_classifier.services.filtering.types import FilterOperationCode  # noqa: E402
 
 
 def test_progress_dialog_cancel_routes_through_file_manager():
@@ -282,3 +285,64 @@ def test_refresh_and_emit_visible_files_reapplies_filters_when_active():
         ("/tmp/b.png", "/tmp")
     ]
     manager._apply_cumulative_filters.assert_called_once()
+
+
+def test_build_filter_criteria_normalizes_singular_file_type():
+    manager = FileManager.__new__(FileManager)
+    manager._active_filters = {
+        "file_type": ["Image"],
+        "category": [],
+        "year": [],
+        "extension": [],
+    }
+    manager._normalize_year_filters = lambda values: values
+    manager._normalize_file_type_filter_value = (
+        FileManager._normalize_file_type_filter_value.__get__(manager, FileManager)
+    )
+
+    criteria = manager._build_filter_criteria()
+
+    assert len(criteria) == 1
+    assert criteria[0].key == "file_type"
+    assert criteria[0].value == FilterType.IMAGES.value
+
+
+def test_apply_cumulative_filters_maps_database_error_code():
+    manager = FileManager.__new__(FileManager)
+    manager.logger = MagicMock()
+    manager.file_service = MagicMock()
+    manager.file_service.refresh_file_list.return_value = FileOperationResult(
+        success=True,
+        code=FileOperationCode.OK,
+        message="ok",
+        data={FileOperationDataKey.FILE_LIST.value: [("/tmp/a.png", "/tmp")]},
+    )
+    manager.content_filter_service = MagicMock()
+    manager.content_filter_service.apply_filters.return_value = SimpleNamespace(
+        success=False,
+        code=FilterOperationCode.DATABASE_ERROR,
+        message="database down",
+        data={"error": "database down"},
+    )
+    manager.files_updated = MagicMock()
+    manager.filter_applied = MagicMock()
+    manager.filter_failed = MagicMock()
+    manager._active_filters = {
+        "file_type": [],
+        "category": [],
+        "year": [],
+        "extension": [],
+    }
+    manager._build_filter_criteria = MagicMock(return_value=[])
+    manager._map_filter_code_to_file_code = (
+        FileManager._map_filter_code_to_file_code.__get__(manager, FileManager)
+    )
+
+    result = manager._apply_cumulative_filters()
+
+    assert result.success is False
+    assert result.code == FileOperationCode.DATABASE_ERROR
+    assert result.data[FileOperationDataKey.FILTERED_FILES.value] == [
+        ("/tmp/a.png", "/tmp")
+    ]
+    manager.filter_failed.emit.assert_called_once()
