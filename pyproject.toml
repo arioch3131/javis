@@ -15,7 +15,7 @@ dependencies = [
     "chardet<8",
     "SQLAlchemy==2.0.48",
     "alembic==1.17.1",
-    "numpy==2.4.4",
+    "numpy==2.4.5",
     "pillow==12.2.0",
     "pdfminer.six==20260107",
     "python-docx==1.2.0",
